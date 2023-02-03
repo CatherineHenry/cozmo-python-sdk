@@ -1,0 +1,17 @@
+[[package]]
+name = "cozmoclad"
+version = "3.4.0"
+description = "Low-level protocol for the Anki Cozmo SDK."
+category = "main"
+optional = false
+python-versions = "*"
+
+[metadata]
+lock-version = "1.1"
+python-versions = "^3.9"
+content-hash = "e1527de02b7a63778d4a686252519f07a8d49e8f1b7d0d9cda6e95e84e2e920d"
+
+[metadata.files]
+cozmoclad = [
+    {file = "cozmoclad-3.4.0-py3-none-any.whl", hash = "sha256:b831b4caf38890813c31e294daeda5a503b342ae5609ba24138c9e7211ade208"},
+]
