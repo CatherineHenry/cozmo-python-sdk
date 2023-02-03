@@ -139,12 +139,12 @@ class IOSConnector(DeviceConnector):
         try:
             if self.serial is None:
                 device_info, transport, proto = await self.usbmux.connect_to_first_device(
-                        protocol_factory, self.cozmo_port, exclude=self._connected)
+                    protocol_factory, self.cozmo_port, exclude=self._connected)
 
             else:
                 device_id = await self.usbmux.wait_for_serial(self.serial)
                 device_info, transport, proto = await self.usbmux.connect_to_device(
-                        protocol_factory, device_id, self.cozmo_port)
+                    protocol_factory, device_id, self.cozmo_port)
         except asyncio.TimeoutError as exc:
             raise exceptions.ConnectionError("No connected iOS devices running Cozmo in SDK mode") from exc
 
@@ -160,7 +160,7 @@ class IOSConnector(DeviceConnector):
 
         self._connected.add(device_id)
         logger.info('Connected to iOS device_id=%s serial=%s', device_id,
-                device_info.get('SerialNumber'))
+                    device_info.get('SerialNumber'))
         _observe_connection_lost(proto, functools.partial(self._disconnect, device_id))
         return transport, proto
 
@@ -231,7 +231,7 @@ class AndroidConnector(DeviceConnector):
     def _exec(self, *args):
         try:
             result = subprocess.run([self.adb_cmd] + list(args),
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
         except Exception as e:
             raise ValueError('Failed to execute adb command %s: %s' % (self.adb_cmd, e))
         if result.returncode != 0:
@@ -267,7 +267,7 @@ class AndroidConnector(DeviceConnector):
             self._add_forward(serial)
             try:
                 transport, proto = await loop.create_connection(
-                        protocol_factory, '127.0.0.1', self.cozmo_port)
+                    protocol_factory, '127.0.0.1', self.cozmo_port)
                 proto.device_info={
                     'device_type': 'android',
                     'serial':  serial,
@@ -361,7 +361,7 @@ class FirstAvailableConnector(DeviceConnector):
 
     async def _do_connect(self, connector,loop, protocol_factory, conn_check):
         connect = connector.connect(loop, protocol_factory, conn_check)
-        result = await asyncio.gather(connect, loop=loop, return_exceptions=True)
+        result = await asyncio.gather(connect, return_exceptions=True)
         return result[0]
 
     async def connect(self, loop, protocol_factory, conn_check):
@@ -673,8 +673,8 @@ def connect_with_3dviewer(f, conn_factory=conn.CozmoConnection, connector=None,
                                       % opengl)
         else:
             raise NotImplementedError('opengl is not available; '
-                'make sure the PyOpenGL and Pillow packages are installed:\n'
-                'Do `pip3 install --user cozmo[3dviewer]` to install. Error: %s' % opengl)
+                                      'make sure the PyOpenGL and Pillow packages are installed:\n'
+                                      'Do `pip3 install --user cozmo[3dviewer]` to install. Error: %s' % opengl)
 
     viewer = opengl.OpenGLViewer(enable_camera_view=enable_camera_view, show_viewer_controls=show_viewer_controls)
 
@@ -711,7 +711,7 @@ def connect_with_tkviewer(f, conn_factory=conn.CozmoConnection, connector=None, 
 
     if isinstance(tkview, Exception):
         raise NotImplementedError('tkviewer not available on this platform; '
-            'make sure Tkinter, NumPy and Pillow packages are installed (%s)' % tkview)
+                                  'make sure Tkinter, NumPy and Pillow packages are installed (%s)' % tkview)
 
     viewer = tkview.TkImageViewer(force_on_top=force_on_top)
 
@@ -719,8 +719,8 @@ def connect_with_tkviewer(f, conn_factory=conn.CozmoConnection, connector=None, 
 
 
 def setup_basic_logging(general_log_level=None, protocol_log_level=None,
-        protocol_log_messages=clad_protocol.LOG_ALL, target=sys.stderr,
-        deprecated_filter="default"):
+                        protocol_log_messages=clad_protocol.LOG_ALL, target=sys.stderr,
+                        deprecated_filter="default"):
     '''Helper to perform basic setup of the Python logging machinery.
 
     The SDK defines two loggers:
