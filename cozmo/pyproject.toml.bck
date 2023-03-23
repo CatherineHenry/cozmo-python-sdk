@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "cozmo"
+name = "cozmo-python-sdk"
 version = "0.1.0"
 description = ""
 authors = ["Your Name <you@example.com>"]
@@ -8,7 +8,7 @@ packages = [{include = "cozmo_python_sdk"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-cozmo = { path = "./cozmo",  develop = true }
+#cozmo-python-sdk = { path = "./",  develop = true }
 cozmoclad = "^3.4.0"
 
 [build-system]
