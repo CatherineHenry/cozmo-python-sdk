@@ -681,7 +681,7 @@ def connect_with_3dviewer(f, conn_factory=conn.CozmoConnection, connector=None,
     _connect_viewer(f, conn_factory, connector, viewer)
 
 
-def connect_with_tkviewer(f, conn_factory=conn.CozmoConnection, connector=None, force_on_top=False):
+def connect_with_tkviewer(f, tk_root=None, conn_factory=conn.CozmoConnection, connector=None, force_on_top=False):
     '''Setup a connection to a device and run a user function while displaying Cozmo's camera.
 
     This displays a Tk window on the screen showing a view of Cozmo's camera.
@@ -713,7 +713,7 @@ def connect_with_tkviewer(f, conn_factory=conn.CozmoConnection, connector=None, 
         raise NotImplementedError('tkviewer not available on this platform; '
             'make sure Tkinter, NumPy and Pillow packages are installed (%s)' % tkview)
 
-    viewer = tkview.TkImageViewer(force_on_top=force_on_top)
+    viewer = tkview.TkImageViewer(tk_root=tk_root, force_on_top=force_on_top)
 
     _connect_viewer(f, conn_factory, connector, viewer)
 
@@ -777,7 +777,7 @@ def setup_basic_logging(general_log_level=None, protocol_log_level=None,
         logger_protocol.setLevel(protocol_log_level)
 
 
-def run_program(f, use_viewer=False, conn_factory=conn.CozmoConnection,
+def run_program(f, tk_root=None, use_viewer=False, conn_factory=conn.CozmoConnection,
                 connector=None, force_viewer_on_top=False,
                 deprecated_filter="default", use_3d_viewer=False,
                 show_viewer_controls=True,
@@ -843,7 +843,7 @@ def run_program(f, use_viewer=False, conn_factory=conn.CozmoConnection,
             connect_with_3dviewer(wrapper, conn_factory=conn_factory, connector=connector,
                                   enable_camera_view=use_viewer, show_viewer_controls=show_viewer_controls)
         elif use_viewer:
-            connect_with_tkviewer(wrapper, conn_factory=conn_factory, connector=connector,
+            connect_with_tkviewer(wrapper, tk_root=tk_root, conn_factory=conn_factory, connector=connector,
                                   force_on_top=force_viewer_on_top)
         else:
             connect(wrapper, conn_factory=conn_factory, connector=connector)
