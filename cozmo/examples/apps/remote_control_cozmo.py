@@ -24,6 +24,10 @@ import io
 import json
 import math
 import sys
+from datetime import datetime
+
+import cv2
+import numpy as np
 
 sys.path.append('../lib/')
 import flask_helpers
@@ -495,11 +499,15 @@ def handle_index_page():
                         <b>L</b> : Toggle IR Headlight: <button id="headlightId" onClick=onHeadlightButtonClicked(this) style="font-size: 14px">Default</button><br>
                         <b>O</b> : Toggle Debug Annotations: <button id="debugAnnotationsId" onClick=onDebugAnnotationsButtonClicked(this) style="font-size: 14px">Default</button><br>
                         <b>P</b> : Toggle Free Play mode: <button id="freeplayId" onClick=onFreeplayButtonClicked(this) style="font-size: 14px">Default</button><br>
-                        <b>Y</b> : Toggle Device Gyro mode: <button id="deviceGyroId" onClick=onDeviceGyroButtonClicked(this) style="font-size: 14px">Default</button><br>
+                        <b>Y</b> : Toggle Device Gyro mode: <button id="deviceGyroId" onClick=onDeviceGyroButtonClicked(this) style="font-size: 14px">Save Image</button><br>
                         <h3>Play Animations</h3>
                         <b>0 .. 9</b> : Play Animation mapped to that key<br>
                         <h3>Talk</h3>
                         <b>Space</b> : Say <input type="text" name="sayText" id="sayTextId" value="''' + remote_control_cozmo.text_to_say + '''" onchange=handleTextInput(this)>
+                        <h3>Save Image</h3>
+                        <b>Save</b> : Save image from current camera view: 
+                        <input type="text" name="saveImageFileName" id="saveImageTextId" value="image_name.png">
+                        <button id="saveImageButtonId" onClick=saveImageClicked(saveImageTextId) style="font-size: 14px">Save Image</button><br>
                     </td>
                     <td width=30></td>
                     <td valign=top>
@@ -712,6 +720,13 @@ def handle_index_page():
                         event.cancelBubble = true
                     }
                 }
+                
+                function saveImageClicked(textField)
+                {
+                fileName = textField.value
+                postHttpRequest("saveImage", {fileName})
+                }
+
 
                 document.getElementById("sayTextId").addEventListener("keydown", function(event) {
                     stopEventPropagation(event);
@@ -905,6 +920,22 @@ def handle_updateCozmo():
         '''
     return ""
 
+@flask_app.route('/saveImage', methods=['POST'])
+def handle_save_image():
+    message = json.loads(request.data.decode("utf-8"))
+    file_name = message['fileName']
+    if remote_control_cozmo:
+        latest_image = remote_control_cozmo.cozmo.world.latest_image
+
+        if latest_image is not None:
+            # Scale the camera image down to fit on Cozmo's face
+            # resized_image = latest_image.raw_image.resize(face_dimensions,
+            #                                               Image.BICUBIC)
+
+            # date_timestamp = datetime.now().strftime('%m_%d')
+            # imwrite_path = f"./remote_control_saved_images/{date_timestamp}_{file_name}"
+            imwrite_path = f"./remote_control_saved_images/{file_name}"
+            cv2.imwrite(imwrite_path, cv2.cvtColor(np.array(latest_image.raw_image), cv2.COLOR_RGB2BGR))
 
 def run(sdk_conn):
     robot = sdk_conn.wait_for_robot()
@@ -915,9 +946,22 @@ def run(sdk_conn):
     remote_control_cozmo = RemoteControlCozmo(robot)
 
     # Turn on image receiving by the camera
+    exposure_amount = 0.5
+    gain_amount = 0.05
     robot.camera.image_stream_enabled = True
 
-    flask_helpers.run_flask(flask_app)
+    robot.camera.color_image_enabled = True
+    robot.camera.enable_auto_exposure = False
+    min_exposure = robot.camera.config.min_exposure_time_ms
+    max_exposure = robot.camera.config.max_exposure_time_ms
+    exposure_time = (1 - exposure_amount) * min_exposure + exposure_amount * max_exposure
+    # Lerp gain
+    min_gain = robot.camera.config.min_gain
+    max_gain = robot.camera.config.max_gain
+    actual_gain = (1 - gain_amount) * min_gain + gain_amount * max_gain
+    robot.camera.set_manual_exposure(exposure_time, actual_gain)
+
+    flask_helpers.run_flask(flask_app, host_port=8111)
 
 if __name__ == '__main__':
     cozmo.setup_basic_logging()
