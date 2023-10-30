@@ -1,15 +1,20 @@
 [tool.poetry]
-name = "cozmo"
-version = "0.1.0"
+name = "cozmo-fork"
+version = "4.2.0"
 description = ""
 authors = ["Your Name <you@example.com>"]
 readme = "README.md"
-packages = [{include = "cozmo_python_sdk"}]
+packages = [{include = "cozmo_fork"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
 cozmo = { path = "./cozmo",  develop = true }
 cozmoclad = "^3.4.0"
+numpy = "^1.24.1"
+Pillow = "^9.4.0"
+opencv-python = "^4.7.0.72"
+Flask = "^3.0.0"
+requests = "^2.31.0"
 
 [build-system]
 requires = ["poetry-core"]
