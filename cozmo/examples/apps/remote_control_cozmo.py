@@ -504,10 +504,20 @@ def handle_index_page():
                         <b>0 .. 9</b> : Play Animation mapped to that key<br>
                         <h3>Talk</h3>
                         <b>Space</b> : Say <input type="text" name="sayText" id="sayTextId" value="''' + remote_control_cozmo.text_to_say + '''" onchange=handleTextInput(this)>
+                        
                         <h3>Save Image</h3>
                         <b>Save</b> : Save image from current camera view: 
                         <input type="text" name="saveImageFileName" id="saveImageTextId" value="image_name.png">
                         <button id="saveImageButtonId" onClick=saveImageClicked(saveImageTextId) style="font-size: 14px">Save Image</button><br>
+                        
+                        <h3>Adjust Camera</h3>
+                        <b>Save</b> : Adjust camera settings: 
+                        <input type="text" name="adjustGain" id="adjustGainId" value="0.05">
+                        <button id="saveGainSettingsButtonId" onClick=saveGainSettingsClicked(adjustGainId) style="font-size: 14px">Save Gain</button><br>
+
+                        <input type="text" name="adjustExposure" id="adjustExposureId" value="0.05">
+                        <button id="saveExposureSettingsButtonId" onClick=saveExposureSettingsClicked(adjustExposureId) style="font-size: 14px">Save Exposure</button><br>
+                        
                     </td>
                     <td width=30></td>
                     <td valign=top>
@@ -725,6 +735,18 @@ def handle_index_page():
                 {
                 fileName = textField.value
                 postHttpRequest("saveImage", {fileName})
+                }   
+                
+                function saveGainSettingsClicked(textField1)
+                {
+                gain = textField1.value
+                postHttpRequest("adjustCameraGain", {gain})
+                }
+         
+                function saveExposureSettingsClicked(textField1)
+                {
+                exposure = textField1.value
+                postHttpRequest("adjustCameraExposure", {exposure})
                 }
 
 
@@ -932,10 +954,53 @@ def handle_save_image():
             # resized_image = latest_image.raw_image.resize(face_dimensions,
             #                                               Image.BICUBIC)
 
-            # date_timestamp = datetime.now().strftime('%m_%d')
             # imwrite_path = f"./remote_control_saved_images/{date_timestamp}_{file_name}"
-            imwrite_path = f"./remote_control_saved_images/{file_name}"
-            cv2.imwrite(imwrite_path, cv2.cvtColor(np.array(latest_image.raw_image), cv2.COLOR_RGB2BGR))
+            # imwrite_path = f"./remote_control_saved_images/{file_name}"
+            date_timestamp = datetime.now().strftime('%m_%d_%H_%M_%S')
+            imwrite_path = f"./remote_control_saved_images/{date_timestamp}.png"
+
+            # img = preprocess_image(img_raw, (512, 512))
+
+            # fit_size = (512, 512) # this is the size we use in yolo obj detection in retico
+            # if fit_size == (latest_image.raw_image.width, latest_image.raw_image.height):
+            #     image = latest_image.raw_image.copy()
+            #     scale = 1
+            # else:
+            #     img_ratio = latest_image.raw_image.width / latest_image.raw_image.height
+            #     fit_width, fit_height = fit_size
+            #     fit_ratio = fit_width / fit_height
+            #     if img_ratio > fit_ratio:
+            #         fit_height = int(fit_width / img_ratio)
+            #     elif img_ratio < fit_ratio:
+            #         fit_width = int(fit_height * img_ratio)
+            #     image = latest_image.raw_image.resize((fit_width, fit_height))
+            image = latest_image.raw_image
+            cv2.imwrite(imwrite_path, cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR))
+    return ""
+
+@flask_app.route('/adjustCameraGain', methods=['POST'])
+def adjust_camera_gain():
+    message = json.loads(request.data.decode("utf-8"))
+    gain_amount = float(message['gain'])
+    if remote_control_cozmo:
+        exposure_time = remote_control_cozmo.cozmo.camera.exposure_ms
+        min_gain = remote_control_cozmo.cozmo.camera.config.min_gain
+        max_gain = remote_control_cozmo.cozmo.camera.config.max_gain
+        actual_gain = (1 - gain_amount) * min_gain + gain_amount * max_gain
+        remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure_time, actual_gain)
+    return ""
+
+@flask_app.route('/adjustCameraExposure', methods=['POST'])
+def adjust_camera_exposure():
+    message = json.loads(request.data.decode("utf-8"))
+    exposure_time = float(message['exposure'])
+    if remote_control_cozmo:
+        gain_amount = remote_control_cozmo.cozmo.camera.gain
+        min_gain = remote_control_cozmo.cozmo.camera.config.min_gain
+        max_gain = remote_control_cozmo.cozmo.camera.config.max_gain
+        actual_gain = (1 - gain_amount) * min_gain + gain_amount * max_gain
+        remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure_time, actual_gain)
+    return ""
 
 def run(sdk_conn):
     robot = sdk_conn.wait_for_robot()
@@ -944,7 +1009,8 @@ def run(sdk_conn):
 
     global remote_control_cozmo
     remote_control_cozmo = RemoteControlCozmo(robot)
-
+    # don't start with freeplay behaviour on
+    remote_control_cozmo.cozmo.stop_freeplay_behaviors()
     # Turn on image receiving by the camera
     exposure_amount = 0.5
     gain_amount = 0.05
