@@ -287,7 +287,7 @@ class RemoteControlCozmo:
         if not is_key_down:
             if (key_code >= ord('0')) and (key_code <= ord('9')):
                 anim_name = self.key_code_to_anim_name(key_code)
-                self.play_animation(anim_name)
+                # self.play_animation(anim_name)
             elif key_code == ord(' '):
                 self.say_text(self.text_to_say)
 
@@ -500,6 +500,7 @@ def handle_index_page():
                         <b>O</b> : Toggle Debug Annotations: <button id="debugAnnotationsId" onClick=onDebugAnnotationsButtonClicked(this) style="font-size: 14px">Default</button><br>
                         <b>P</b> : Toggle Free Play mode: <button id="freeplayId" onClick=onFreeplayButtonClicked(this) style="font-size: 14px">Default</button><br>
                         <b>Y</b> : Toggle Device Gyro mode: <button id="deviceGyroId" onClick=onDeviceGyroButtonClicked(this) style="font-size: 14px">Save Image</button><br>
+                        <b>Z</b> : Toggle Camera Color mode: <button id="cameraColorId" onClick=onCameraColorButtonClicked(this) style="font-size: 14px">Save Image</button><br>
                         <h3>Play Animations</h3>
                         <b>0 .. 9</b> : Play Animation mapped to that key<br>
                         <h3>Talk</h3>
@@ -511,11 +512,11 @@ def handle_index_page():
                         <button id="saveImageButtonId" onClick=saveImageClicked(saveImageTextId) style="font-size: 14px">Save Image</button><br>
                         
                         <h3>Adjust Camera</h3>
-                        <b>Save</b> : Adjust camera settings: 
+                        <b>Save</b> : Adjust camera settings: <br>
                         <input type="text" name="adjustGain" id="adjustGainId" value="0.05">
                         <button id="saveGainSettingsButtonId" onClick=saveGainSettingsClicked(adjustGainId) style="font-size: 14px">Save Gain</button><br>
 
-                        <input type="text" name="adjustExposure" id="adjustExposureId" value="0.05">
+                        <input type="text" name="adjustExposure" id="adjustExposureId" value="0.5">
                         <button id="saveExposureSettingsButtonId" onClick=saveExposureSettingsClicked(adjustExposureId) style="font-size: 14px">Save Exposure</button><br>
                         
                     </td>
@@ -535,6 +536,7 @@ def handle_index_page():
                 var gIsHeadlightEnabled = false
                 var gIsFreeplayEnabled = false
                 var gIsDeviceGyroEnabled = false
+                var gIsCameraColorEnabled = true
                 var gUserAgent = window.navigator.userAgent;
                 var gIsMicrosoftBrowser = gUserAgent.indexOf('MSIE ') > 0 || gUserAgent.indexOf('Trident/') > 0 || gUserAgent.indexOf('Edge/') > 0;
                 var gSkipFrame = false;
@@ -634,6 +636,15 @@ def handle_index_page():
                     isFreeplayEnabled = gIsFreeplayEnabled
                     postHttpRequest("setFreeplayEnabled", {isFreeplayEnabled})
                 }
+                
+                function onCameraColorButtonClicked(button)
+                {
+                    gIsCameraColorEnabled = !gIsCameraColorEnabled;
+                    updateButtonEnabledText(button, gIsCameraColorEnabled);
+                    isCameraColorEnabled = gIsCameraColorEnabled
+                    postHttpRequest("setCameraColorEnabled", {isCameraColorEnabled})
+                
+                }
 
                 function onDeviceGyroButtonClicked(button)
                 {
@@ -647,6 +658,7 @@ def handle_index_page():
                 updateButtonEnabledText(document.getElementById("headlightId"), gIsHeadlightEnabled);
                 updateDebugAnnotationButtonEnabledText(document.getElementById("debugAnnotationsId"), gAreDebugAnnotationsEnabled);
                 updateButtonEnabledText(document.getElementById("freeplayId"), gIsFreeplayEnabled);
+                updateButtonEnabledText(document.getElementById("cameraColorId"), gIsCameraColorEnabled);
                 updateButtonEnabledText(document.getElementById("deviceGyroId"), gIsDeviceGyroEnabled);
 
                 function handleDropDownSelect(selectObject)
@@ -877,6 +889,20 @@ def handle_setFreeplayEnabled():
     return ""
 
 
+
+@flask_app.route('/setCameraColorEnabled', methods=['POST'])
+def handle_setCameraColorEnabled():
+    '''Called from Javascript whenever freeplay mode is toggled on/off'''
+    message = json.loads(request.data.decode("utf-8"))
+    if remote_control_cozmo:
+        isCameraColorEnabled = message['isCameraColorEnabled']
+        if isCameraColorEnabled:
+            remote_control_cozmo.cozmo.camera.color_image_enabled = True
+        else:
+            remote_control_cozmo.cozmo.camera.color_image_enabled = False
+    return ""
+
+
 @flask_app.route('/setDeviceGyroEnabled', methods=['POST'])
 def handle_setDeviceGyroEnabled():
     '''Called from Javascript whenever device gyro mode is toggled on/off'''
@@ -988,18 +1014,20 @@ def adjust_camera_gain():
         max_gain = remote_control_cozmo.cozmo.camera.config.max_gain
         actual_gain = (1 - gain_amount) * min_gain + gain_amount * max_gain
         remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure_time, actual_gain)
+        print(f"Actual gain: {actual_gain}")
     return ""
 
 @flask_app.route('/adjustCameraExposure', methods=['POST'])
 def adjust_camera_exposure():
     message = json.loads(request.data.decode("utf-8"))
-    exposure_time = float(message['exposure'])
+    exposure_amount = float(message['exposure'])
     if remote_control_cozmo:
         gain_amount = remote_control_cozmo.cozmo.camera.gain
-        min_gain = remote_control_cozmo.cozmo.camera.config.min_gain
-        max_gain = remote_control_cozmo.cozmo.camera.config.max_gain
-        actual_gain = (1 - gain_amount) * min_gain + gain_amount * max_gain
-        remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure_time, actual_gain)
+        min_exposure = remote_control_cozmo.cozmo.camera.config.min_exposure_time_ms
+        max_exposure = remote_control_cozmo.cozmo.camera.config.max_exposure_time_ms
+        exposure_time = (1 - exposure_amount) * min_exposure + exposure_amount * max_exposure
+        print(f"Exposure time: {exposure_time}")
+        remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure_time, gain_amount)
     return ""
 
 def run(sdk_conn):
@@ -1013,21 +1041,36 @@ def run(sdk_conn):
     remote_control_cozmo.cozmo.stop_freeplay_behaviors()
     # Turn on image receiving by the camera
     exposure_amount = 0.5
+    # exposure_amount = 0.9 # nice settings for when in color at night. todo: test during day
     gain_amount = 0.05
+    # gain_amount = 0.01 # nice settings for when in color at night: todo: test during day
+
+    # exposure_amount = 0.4 # for finding cube with light symbol
+    # gain_amount = 0.01 # for finding cube with light symbol
+    # exposure_amount = 0.3
+    # gain_amount = 0.6
     robot.camera.image_stream_enabled = True
 
     robot.camera.color_image_enabled = True
+    # robot.camera.color_image_enabled = False
     robot.camera.enable_auto_exposure = False
+
     min_exposure = robot.camera.config.min_exposure_time_ms
     max_exposure = robot.camera.config.max_exposure_time_ms
+
+    print(f"Min exposure: {min_exposure}, Max exposure: {max_exposure}")
     exposure_time = (1 - exposure_amount) * min_exposure + exposure_amount * max_exposure
+    print(f"Exposure time: {exposure_time}")
     # Lerp gain
     min_gain = robot.camera.config.min_gain
     max_gain = robot.camera.config.max_gain
+    print(f"Min gain: {min_gain}, Max gain: {max_gain}")
+
     actual_gain = (1 - gain_amount) * min_gain + gain_amount * max_gain
+    print(f"Actual gain: {actual_gain}")
     robot.camera.set_manual_exposure(exposure_time, actual_gain)
 
-    flask_helpers.run_flask(flask_app, host_port=8111)
+    flask_helpers.run_flask(flask_app, host_port=8112)
 
 if __name__ == '__main__':
     cozmo.setup_basic_logging()
