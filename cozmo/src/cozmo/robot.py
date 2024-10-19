@@ -38,7 +38,7 @@ __all__ = ['MIN_HEAD_ANGLE', 'MAX_HEAD_ANGLE',
            'MIN_LIFT_HEIGHT', 'MIN_LIFT_HEIGHT_MM', 'MAX_LIFT_HEIGHT', 'MAX_LIFT_HEIGHT_MM',
            'MIN_LIFT_ANGLE', 'MAX_LIFT_ANGLE',
            # Event classes
-           'EvtRobotReady', 'EvtRobotStateUpdated', 'EvtUnexpectedMovement',
+           'EvtPoseHistory', 'EvtRobotReady', 'EvtRobotStateUpdated', 'EvtUnexpectedMovement',
            # Helper classes
            'LiftPosition', 'UnexpectedMovementSide', 'UnexpectedMovementType',
            # Robot Action classes
@@ -91,6 +91,10 @@ class EvtUnexpectedMovement(event.Event):
     timestamp = "Robot timestamp for when the unexpected movement occurred"
     movement_type = "An UnexpectedMovementType Object representing the type of unexpected movement"
     movement_side = "An UnexpectedMovementSide Object representing the side that is obstructing movement"
+
+class EvtPoseHistory(event.Event):
+    '''Dispatched when a new memory map is received.'''
+    pose_history = 'A list of pose histories'
 
 #### Constants
 
@@ -223,6 +227,42 @@ class GoToObject(action.Action):
                                                 useManualSpeed=False,
                                                 usePreDockPose=False)
 
+
+class AlignWithObject(action.Action):
+    '''Represents the dock with cube action in progress.
+
+    Returned by :meth:`~cozmo.robot.Robot.dock_with_cube`
+    '''
+    def __init__(self,  obj, approach_angle, alignment_type, distance_from_marker,  **kw):
+        super().__init__(**kw)
+        #: The object (e.g. an instance of :class:`cozmo.objects.LightCube`) that is being put down
+        self.obj = obj
+        self.alignment_type = alignment_type
+        if approach_angle is None:
+            self.use_approach_angle = False
+            self.approach_angle = util.degrees(0)
+        else:
+            self.use_approach_angle = True
+            self.approach_angle = approach_angle
+
+        if distance_from_marker is None:
+            self.distance_from_marker = util.distance_mm(0)
+        else:
+            self.distance_from_marker = distance_from_marker
+
+    def _repr_values(self):
+        return "object=%s" % (self.obj)
+
+    def _encode(self):
+        return _clad_to_engine_iface.AlignWithObject(objectID=self.obj.object_id,
+                                                     distanceFromMarker_mm=self.distance_from_marker.distance_mm,
+                                                     approachAngle_rad=self.approach_angle.radians,
+                                                     alignmentType=self.alignment_type.id,
+                                                     useApproachAngle=self.use_approach_angle,
+                                                     usePreDockPose=self.use_approach_angle,
+                                                     useManualSpeed=False)
+
+
 class DockWithCube(action.Action):
     '''Represents the dock with cube action in progress.
 
@@ -254,7 +294,8 @@ class DockWithCube(action.Action):
                                                      approachAngle_rad=self.approach_angle.radians,
                                                      alignmentType=self.alignment_type.id,
                                                      useApproachAngle=self.use_approach_angle,
-                                                     usePreDockPose=self.use_approach_angle,
+                                                     usePreDockPose=False,
+                                                     # usePreDockPose=self.use_approach_angle,
                                                      useManualSpeed=False)
 
 class RollCube(action.Action):
@@ -627,6 +668,33 @@ class PerformOffChargerContext(event.Dispatcher):
         return False
 
 
+
+# class EventList(list):
+#
+#     def __setitem__(self, key, value):
+#         super(EventList, self).__setitem__(key, value)
+#         print("The list has been changed!")
+#
+#     def __delitem__(self, value):
+#         super(EventList, self).__delitem__(value)
+#         print("The list has been changed!")
+#
+#     def __add__(self, value):
+#         super(EventList, self).__add__(value)
+#         print("The list has been changed!")
+#
+#     def __iadd__(self, value):
+#         super(EventList, self).__iadd__(value)
+#         print("The list has been changed!")
+#
+#     def append(self, value):
+#         super(EventList, self).append(value)
+#
+#         print("The list has been changed!")
+#
+#     def remove(self, value):
+#         super(EventList, self).remove(value)
+
 class Robot(event.Dispatcher):
     """The interface to a Cozmo robot.
 
@@ -677,6 +745,10 @@ class Robot(event.Dispatcher):
     #: callable: The factory function that returns a
     #: :class:`DockWithCube` class or subclass instance.
     dock_with_cube_factory = DockWithCube
+
+    #: callable: The factory function that returns a
+    #: :class:`DockWithCube` class or subclass instance.
+    align_with_object_factory = AlignWithObject
 
     #: callable: The factory function that returns a
     #: :class:`RollCube` class or subclass instance.
@@ -839,6 +911,8 @@ class Robot(event.Dispatcher):
         self._add_child_dispatcher(self._action_dispatcher)
         self._add_child_dispatcher(self.world)
 
+        self.pose_history = []  #EventList()
+        self.pose_history_relative_to_robot = []  #EventList()
 
     #### Private Methods ####
 
@@ -1766,8 +1840,8 @@ class Robot(event.Dispatcher):
         # face image action (if one is running)
         if ((self._current_face_image_action is not None) and
                 self._current_face_image_action.is_running):
+            print("aborting action, two running")
             self._current_face_image_action.abort()
-
         action = self.display_oled_face_image_factory(screen_data=screen_data,
                                                       duration_ms=duration_ms,
                                                       conn=self.conn, robot=self,
@@ -2008,8 +2082,14 @@ class Robot(event.Dispatcher):
             A :class:`cozmo.robot.GoToPose` action object which can be queried
                 to see when it is complete.
         '''
+        self.pose_history.append(pose)
+        # relative_pose_redefined_from_robot_origin = self.pose.define_pose_relative_this(pose)
+        relative_pose = self.pose.define_new_pose_relative_to_robot(pose)
         if relative_to_robot:
             pose = self.pose.define_pose_relative_this(pose)
+        self.pose_history_relative_to_robot.append(relative_pose) # pose has to be relative to robot to draw in OpenGL
+        self.world.dispatch_event(EvtPoseHistory,
+                             pose_history=[self.pose_history_relative_to_robot, self.pose_history])
         action = self.go_to_pose_factory(pose=pose,
                 conn=self.conn, robot=self, dispatch_parent=self)
         self._action_dispatcher._send_single_action(action,
@@ -2086,6 +2166,35 @@ class Robot(event.Dispatcher):
                                                     num_retries=num_retries)
         return action
 
+    def align_with_object(self, target_object, alignment_type=None, distance_from_marker=None, approach_angle=None, check_for_object_on_top=False,
+                  in_parallel=False, num_retries=0):
+        '''Tells Cozmo to roll a specified cube object.
+
+        Args:
+            target_object (:class:`cozmo.objects.LightCube`): The cube to roll.
+            approach_angle (:class:`cozmo.util.Angle`): The angle to approach the
+                cube from.   For example, 180 degrees will cause cozmo to drive
+                past the cube and approach it from behind.
+            check_for_object_on_top (bool): If there is a cube on top of the
+                specified cube, and check_for_object_on_top is True, then Cozmo
+                will ignore the action.
+            in_parallel (bool): True to run this action in parallel with
+                previous actions, False to require that all previous actions
+                be already complete.
+            num_retries (int): Number of times to retry the action if the
+                previous attempt(s) failed.
+        Returns:
+            A :class:`cozmo.robot.RollCube` action object which can be queried
+                to see when it is complete.
+        '''
+
+
+        action = self.align_with_object_factory(obj=target_object, distance_from_marker=distance_from_marker, alignment_type=alignment_type, approach_angle=approach_angle,
+                                        conn=self.conn, robot=self, dispatch_parent=self)
+        self._action_dispatcher._send_single_action(action,
+                                                    in_parallel=in_parallel,
+                                                    num_retries=num_retries)
+        return action
     def roll_cube(self, target_object, approach_angle=None, check_for_object_on_top=False,
                   in_parallel=False, num_retries=0):
         '''Tells Cozmo to roll a specified cube object.

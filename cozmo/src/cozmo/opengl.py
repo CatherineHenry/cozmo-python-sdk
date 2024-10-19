@@ -46,6 +46,7 @@ __all__ = ['DynamicTexture', 'LoadedObjFile', 'OpenGLViewer', 'OpenGLWindow',
 
 import collections
 import math
+from math import cos, sin, pi
 import time
 from pkg_resources import resource_stream
 
@@ -73,10 +74,10 @@ def _glut_install_instructions():
     elif sys.platform.startswith('darwin'):
         return "GLUT should already be installed by default on macOS!"
     elif sys.platform in ('win32', 'cygwin'):
-        return "Install freeglut: You can download it from http://freeglut.sourceforge.net/ \n"\
-            "You just need the `freeglut.dll` file, from any of the 'Windows binaries' downloads. "\
-            "Place the DLL next to your Python script, or install it somewhere in your PATH "\
-            "to allow any script to use it."
+        return "Install freeglut: You can download it from http://freeglut.sourceforge.net/ \n" \
+               "You just need the `freeglut.dll` file, from any of the 'Windows binaries' downloads. " \
+               "Place the DLL next to your Python script, or install it somewhere in your PATH " \
+               "to allow any script to use it."
     else:
         return "(Instructions unknown for platform %s)" % sys.platform
 
@@ -406,6 +407,137 @@ class RenderableObject:
             glCallList(mesh)
 
 
+def _make_origin_arrow():
+    new_gl_list = glGenLists(1)
+    glNewList(new_gl_list, GL_COMPILE)
+
+    glBegin(GL_TRIANGLES)
+
+    # below grid
+    glVertex3f(0, 10, -0.5)
+    glVertex3f(0, -10, -0.5)
+    glVertex3f(10, 0, -0.5)
+
+    #above grid
+    glVertex3f(0, 10, 0.0)
+    glVertex3f(0, -10, 0.0)
+    glVertex3f(10, 0, 0.0)
+
+    glEnd()
+
+    glEndList()
+
+    return new_gl_list
+
+
+def _make_pose_arrow():
+    """Make a small-size pose cube, with normals, centered at the origin"""
+    new_gl_list = glGenLists(1)
+    glNewList(new_gl_list, GL_COMPILE)
+
+    # build each of the 6 faces
+    # for face_index in range(6):
+    #     # calculate normal and vertices for this face
+    #     vertex_normal = [0.0, 0.0, 0.0]
+    #     vertex_pos_options1 = [-0.1, 0.1,  0.1, -0.1]
+    #     vertex_pos_options2 = [ 0.1, 0.1, -0.1, -0.1]
+    #     face_index_even = ((face_index % 2) == 0)
+    #     # odd and even faces point in opposite directions
+    #     normal_dir = 1.0 if face_index_even else -1.0
+    #     if face_index < 2:
+    #         # -X and +X faces (vert positions differ in Y,Z)
+    #         vertex_normal[0] = normal_dir
+    #         v1i = 1
+    #         v2i = 2
+    #     elif face_index < 4:
+    #         # -Y and +Y faces (vert positions differ in X,Z)
+    #         vertex_normal[1] = normal_dir
+    #         v1i = 0
+    #         v2i = 2
+    #     else:
+    #         # -Z and +Z faces (vert positions differ in X,Y)
+    #         vertex_normal[2] = normal_dir
+    #         v1i = 0
+    #         v2i = 1
+    #
+    #     vertex_pos = list(vertex_normal)
+    #
+    #     # Polygon (N verts) with optional normals and tex coords
+    #     glBegin(GL_POLYGON)
+    #     for vert_index in range(4):
+    #         vertex_pos[v1i] = vertex_pos_options1[vert_index]
+    #         vertex_pos[v2i] = vertex_pos_options2[vert_index]
+    #         glNormal3fv(vertex_normal)
+    #         glVertex3fv(vertex_pos)
+    #     glEnd()
+    #
+    #
+    # pose_matrix = pose.to_matrix()
+    # glMultMatrixf(robot_matrix.in_row_order)
+
+    # glPushMatrix();
+    # glTranslatef(0.0, 0.0, -4.5)
+
+    glBegin(GL_TRIANGLES)
+    # glColor3f(0.1, 0.2, 0.3);
+    # glVertex3f(-10, 0, 10)
+    # glVertex3f(0, 10, 10)
+    # glVertex3f(-10, 0, 10)
+
+    glVertex3f(-10, 3, 0.0)
+    glVertex3f(-10, -3, 0.0)
+    glVertex3f(0, 0, 0.0)
+    glEnd()
+    # glPopMatrix();
+
+    glEndList()
+
+    return new_gl_list
+
+def _make_pose_cube():
+    new_gl_list = glGenLists(1)
+    glNewList(new_gl_list, GL_COMPILE)
+
+    # build each of the 6 faces
+    for face_index in range(6):
+        # calculate normal and vertices for this face
+        vertex_normal = [0.0, 0.0, 0.0]
+        vertex_pos_options1 = [-0.1, 0.1,  0.1, -0.1]
+        vertex_pos_options2 = [ 0.1, 0.1, -0.1, -0.1]
+        face_index_even = ((face_index % 2) == 0)
+        # odd and even faces point in opposite directions
+        normal_dir = 1.0 if face_index_even else -1.0
+        if face_index < 2:
+            # -X and +X faces (vert positions differ in Y,Z)
+            vertex_normal[0] = normal_dir
+            v1i = 1
+            v2i = 2
+        elif face_index < 4:
+            # -Y and +Y faces (vert positions differ in X,Z)
+            vertex_normal[1] = normal_dir
+            v1i = 0
+            v2i = 2
+        else:
+            # -Z and +Z faces (vert positions differ in X,Y)
+            vertex_normal[2] = normal_dir
+            v1i = 0
+            v2i = 1
+
+        vertex_pos = list(vertex_normal)
+
+        # Polygon (N verts) with optional normals and tex coords
+        glBegin(GL_POLYGON)
+        for vert_index in range(4):
+            vertex_pos[v1i] = vertex_pos_options1[vert_index]
+            vertex_pos[v2i] = vertex_pos_options2[vert_index]
+            glNormal3fv(vertex_normal)
+            glVertex3fv(vertex_pos)
+        glEnd()
+
+    glEndList()
+
+    return new_gl_list
+
 def _make_unit_cube():
     """Make a unit-size cube, with normals, centered at the origin"""
     new_gl_list = glGenLists(1)
@@ -606,10 +738,11 @@ class OpenGLViewer():
             the live camera view.
         show_viewer_controls (bool): Specifies whether to draw controls on the view.
     """
-    def __init__(self, enable_camera_view, show_viewer_controls=True):
+    def __init__(self, enable_camera_view, show_viewer_controls=True, enable_plotting=False):
         # Queues from SDK thread to OpenGL thread
         self._img_queue = collections.deque(maxlen=1)
         self._nav_memory_map_queue = collections.deque(maxlen=1)
+        self._pose_history_queue = collections.deque(maxlen=1)
         self._world_frame_queue = collections.deque(maxlen=1)
         # Queue from OpenGL thread to SDK thread
         self._input_intent_queue = collections.deque(maxlen=1)
@@ -637,11 +770,17 @@ class OpenGLViewer():
         if enable_camera_view:
             self.viewer_window = OpenGLWindow(self.main_window.width, 0, 640, 480,
                                               b"Cozmo CameraFeed", is_3d=False)
+        #
+        # self.plotting_window = None
+        # if enable_plotting:
+        #     self.plotting_window = OpenGLWindow(self.main_window.width, self.main_window.height, 650, 480, b"Plotting", is_3d=False)
+
 
         self.cozmo_object = None  # type: RenderableObject
         self.cube_objects = []
 
         self._latest_world_frame = None  # type: WorldRenderFrame
+        self._latest_pose_history = None
         self._nav_memory_map_display_list = None
 
         # Keyboard
@@ -653,6 +792,17 @@ class OpenGLViewer():
         # Mouse
         self._is_mouse_down = {}
         self._mouse_pos = None  # type: util.Vector2
+
+        # Coordinates
+        self._show_coordinates = False # relative to origin
+        self._show_coordinates_relative_to_robot = False
+
+        # Pose history
+        self._show_pose_history = False
+        self._shade_pose_by_age = False
+
+        #Cozmo
+        self._show_cozmo = True
 
         # Controls
         self._show_controls = show_viewer_controls
@@ -668,7 +818,19 @@ class OpenGLViewer():
                                         'X: same as RMB',
                                         'TAB: center view on robot',
                                         '',
-                                        'H: Toggle help'])
+                                        'H: Toggle help',
+                                        'C: Show coordinate visuals',
+                                        'P: Show pose history',
+                                        'O: Shade pose history (opacity)',
+                                        'B: Show Cozmo (bot)',
+                                        'Note: Smallest square is 10cm',
+                                        '''Note: Nav-Map child orientation is;     +---+----+---+
+                                        | ^ | 2  | 0 |
+                                        +---+----+---+
+                                        | Y | 3  | 1 |
+                                        +---+----+---+
+                                        |   | X->|   |
+                                        +---+----+---+'''])
 
         # Camera position and orientation defined by a look-at positions
         # and a pitch/and yaw to rotate around that along with a distance
@@ -775,7 +937,20 @@ class OpenGLViewer():
             glNewList(self._nav_memory_map_display_list, GL_COMPILE)
 
             glPushMatrix()
+            # draw center of nav memory map. Sneaking in here so it doesn't flash (due to render order)...there is probably a better place elsewhere
+            glColor([1.0, 1.0, 1.0, 0.3])
+            posx = cen.x
+            posy = cen.y
+            sides = 32
+            radius = 10
+            glBegin(GL_POLYGON)
+            for i in range(100):
+                cosine= radius * math.cos(i*2*math.pi/sides) + posx
+                sine  = radius * math.sin(i*2*math.pi/sides) + posy
+                glVertex2f(cosine,sine)
+            glEnd()
 
+            # draw lines of nav memory map (the grid)
             color_light_gray = (0.65, 0.65, 0.65)
             glColor3f(*color_light_gray)
             glBegin(GL_LINE_STRIP)
@@ -851,6 +1026,25 @@ class OpenGLViewer():
             glPopMatrix()
 
 
+    #
+    # def draw_pose_history(self):
+    #     new_pose_history = None
+    #     try:
+    #         new_pose_history = self._pose_history_queue.popleft()
+    #     except IndexError:
+    #         # no new nav pose history - queue is empty
+    #         pass
+    #
+    #     if new_pose_history is not None:
+    #         self._pose_history_display_list = glGenLists(1)
+    #         glNewList(self._pose_history_display_list, GL_COMPILE)
+    #         for i in range(10):
+    #             glBegin(GL_POINTS)
+    #             glVertex2f(i, i)
+    #             glEnd()
+    #             glFlush()
+
+
     def _draw_cozmo(self, robot_frame):
         if self.cozmo_object is None:
             return
@@ -877,6 +1071,8 @@ class OpenGLViewer():
         glMultMatrixf(robot_matrix.in_row_order)
 
         robot_scale_amt = 10.0  # cm to mm
+        # glScalef function produces a general scaling along the x, y, and z axes.
+        # The three arguments indicate the desired scale factors along each of the three axes.
         glScalef(robot_scale_amt, robot_scale_amt, robot_scale_amt)
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
@@ -972,6 +1168,64 @@ class OpenGLViewer():
         glDisable(GL_LIGHTING)
         glPopMatrix()
 
+    def _draw_origin_arrow(self, color):
+        glColor(color)
+
+        ambient_color = [color[0]*0.1, color[1]*0.1, color[2]*0.1, 1.0]
+
+        glMaterialfv(GL_FRONT, GL_AMBIENT, ambient_color)
+        glMaterialfv(GL_FRONT, GL_DIFFUSE, color)
+        glMaterialfv(GL_FRONT, GL_SPECULAR,  color)
+
+        glMaterialfv(GL_FRONT, GL_SHININESS, 10.0);
+
+
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+
+
+        glCallList(self.origin_arrow)
+
+
+    def _draw_pose_arrow(self, color, draw_solid):
+        # glDisable(GL_LIGHTING) # so it shows as red from all angles
+        glColor(color)
+
+        if draw_solid:
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+        else:
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+
+        # glMaterialfv(GL_FRONT, GL_AMBIENT, ambient_color)
+        glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, color)
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR,  color)
+
+
+        glMaterialfv(GL_FRONT, GL_SHININESS, 10.0)
+
+
+        glCallList(self.pose_arrow)
+
+
+    def _draw_pose_cube(self, color, draw_solid):
+        glColor(color)
+
+        if draw_solid:
+            ambient_color = [color[0]*0.1, color[1]*0.1, color[2]*0.1, 1.0]
+        else:
+            ambient_color = color
+        glMaterialfv(GL_FRONT, GL_AMBIENT, ambient_color)
+        glMaterialfv(GL_FRONT, GL_DIFFUSE, color)
+        glMaterialfv(GL_FRONT, GL_SPECULAR,  color)
+
+        glMaterialfv(GL_FRONT, GL_SHININESS, 10.0);
+
+        if draw_solid:
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+        else:
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+
+        glCallList(self.pose_cube)
+
 
     def _draw_unit_cube(self, color, draw_solid):
         glColor(color)
@@ -1048,6 +1302,7 @@ class OpenGLViewer():
 
             robot_frame = world_frame.robot_frame
             robot_pose = robot_frame.pose
+            self._draw_text(GLUT_BITMAP_9_BY_15, f"(x:{round(robot_pose.position.x,3)}, y:{round(robot_pose.position.y,3)})[{round(robot_pose.rotation.angle_z.degrees, 2)}°]", 0, 6)
 
             # Render the cubes
             for i in range(3):
@@ -1115,9 +1370,51 @@ class OpenGLViewer():
 
                     glPopMatrix()
 
-            glDisable(GL_LIGHTING)
 
-            self._draw_cozmo(robot_frame)
+                # Update the latest world frame if there is a new one available
+
+            try:
+                pose_history = self._pose_history_queue.popleft()  # type: WorldRenderFrame
+                self._latest_pose_history = pose_history
+            except IndexError:
+                pose_history = self._latest_pose_history
+                pass
+            if self._show_pose_history:
+                if pose_history is not None:
+                    for idx,past_pose in enumerate(pose_history[0]):
+                        if past_pose is not None and past_pose.is_comparable(robot_pose):
+                            glPushMatrix()
+                            glDisable(GL_LIGHTING) # so it shows as red from all angles
+
+                            pose_matrix = past_pose.to_matrix()
+                            glMultMatrixf(pose_matrix.in_row_order) # this appears to make it so my pose arrow is drawn with 0,0 being the pose specified
+
+                            # # Approximate size of a head
+                            # glScalef(100, 25, 100)
+
+                            # glScalef(0.1, 0.1, 0.1)  # mm to cm
+                            if self._shade_pose_by_age:
+                                CUBE_OBJECT_COLOR = [1.0, 0.0, 0.0, idx/len(pose_history[0])] # red
+                            else:
+                                CUBE_OBJECT_COLOR = [1.0, 0.0, 0.0, 1.0] # red
+
+                            # glRotate(past_pose.rotation.angle_z.degrees, 0, 0)
+                            self._draw_pose_arrow(CUBE_OBJECT_COLOR, draw_solid=True)
+                            if self._show_coordinates:
+                                # self._draw_unit_cube([0.5, 0.5, 0.5, 1.0], True)
+                                self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+                                self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, f"({round(pose_history[1][idx].position.x,2)}, {round(pose_history[1][idx].position.y,2)})[{round(pose_history[1][idx].rotation.angle_z.degrees, 2)}°]", 0, 0, 2)
+
+                            glPopMatrix()
+
+
+
+            glDisable(GL_LIGHTING)
+            if self._show_cozmo:
+                self._draw_cozmo(robot_frame)
+
+                # self._draw_pose_history()
+
 
         if self._show_controls:
             self._draw_controls()
@@ -1125,15 +1422,63 @@ class OpenGLViewer():
         # Draw the (translucent) nav map last so it's sorted correctly against opaque geometry
         self._draw_memory_map()
 
+        # self._draw_origin_circle(color=[1.0, 0.0, 0.0, 1.0])
+        # self._draw_unit_cube(color=[1.0, 0.0, 0.0, 1.0], draw_solid=True)
+        # self._draw_origin_arrow(color=[0.16, 0.35, 1.0, 1.0])
+        self._draw_origin_arrow(color=[1.0, 1.0, 1.0, 1])
+
+        if self._show_coordinates:
+            self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+            self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,0)', 0, 0)
+
+            glPushMatrix() # w/ popmatrix to to save and restore the unscaled coordinate system.
+            glTranslatef(10,0,0)
+            self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+            # glTranslatef(0,0,0)
+            glPopMatrix()
+            # glFlush()
+            self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(10,0)', 10, 0)
+            #
+            glPushMatrix()
+            glTranslatef(-10,0,0)
+            self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+            glPopMatrix()
+            self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(-10,0)', -10, 0)
+
+            # glPushMatrix()
+            # glTranslatef(0,10,0)
+            # self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+            # glPopMatrix()
+            # self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,10)', 0, 10)
+            #
+            # glPushMatrix()
+            # glTranslatef(0,-10,0)
+            # self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+            # glPopMatrix()
+            # self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,-10)', 0, -10)
+
+
         glutSwapBuffers()
+
+    def _draw_text_on_grid(self, font, input, x, y, z=2,  r=1.0, g=1.0, b=1.0):
+        '''Render text based on window position. The origin is in the bottom-left.'''
+        glColor3f(r, g, b)
+        glRasterPos3f(x,y, z)
+        input_list = input.split('\n')
+        # y = y + (line_height * (len(input_list) -1))
+        for line in input_list:
+            glRasterPos3f(x, y, z)
+            # y -= line_height
+            for ch in line:
+                glutBitmapCharacter(font, ctypes.c_int(ord(ch)))
 
     def _draw_controls(self):
         try:
             GLUT_BITMAP_9_BY_15
         except NameError:
             pass
-        else: 
-            self._draw_text(GLUT_BITMAP_9_BY_15, self._instructions, 10, 10)
+        else:
+            self._draw_text(GLUT_BITMAP_9_BY_15, self._instructions, 10, 20)
 
     def _draw_text(self, font, input, x, y, line_height=16, r=1.0, g=1.0, b=1.0):
         '''Render text based on window position. The origin is in the bottom-left.'''
@@ -1209,6 +1554,7 @@ class OpenGLViewer():
 
             if self.viewer_window:
                 self._display_camera_view(self.viewer_window)
+
         except KeyboardInterrupt:
             logger.info("_display caught KeyboardInterrupt - exitting")
             self._request_exit()
@@ -1239,8 +1585,16 @@ class OpenGLViewer():
                 self._camera_look_at.set_to(robot_pos)
         elif ord(key) == 27:  # Escape key
             self._request_exit()
-        elif ord(key) == 72 or ord(key) == 104: # H key
+        elif ord(key) == 72 or ord(key) == 104: # h or H key
             self._show_controls = not self._show_controls
+        elif ord(key) == 67 or ord(key) == 99: # c or C key
+            self._show_coordinates = not self._show_coordinates
+        elif ord(key) == 80 or ord(key) == 112: # p or P key
+            self._show_pose_history = not self._show_pose_history
+        elif ord(key) == 79 or ord(key) == 111: # o or O key
+            self._shade_pose_by_age = not self._shade_pose_by_age
+        elif ord(key) == 66 or ord(key) == 98: # b or B key
+            self._show_cozmo = not self._show_cozmo
 
 
     def _on_special_key_up(self, key, x, y):
@@ -1312,7 +1666,12 @@ class OpenGLViewer():
         self._on_mouse_move_internal(x, y, False)
 
     def init_display(self):
-        glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
+        # glutInitContextVersion (3, 2)
+        # glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
+
+        # glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
+
+        # glutInitDisplayMode(GLUT_3_2_CORE_PROFILE | GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
 
         self.main_window.init_display()
 
@@ -1337,7 +1696,7 @@ class OpenGLViewer():
         if not has_keyboard_up or not has_special_up:
             # Warn on old GLUT implementations that don't implement much of the interface.
             logger.warning("Warning: Old GLUT implementation detected - keyboard remote control of Cozmo disabled."
-                            "We recommend installing freeglut. %s", _glut_install_instructions())
+                           "We recommend installing freeglut. %s", _glut_install_instructions())
             self._is_keyboard_control_enabled = False
         else:
             self._is_keyboard_control_enabled = True
@@ -1366,10 +1725,18 @@ class OpenGLViewer():
         self.cube_objects.append(RenderableObject(_cube_obj, override_mtl=LoadMtlFile("cube3.mtl")))
 
         self.unit_cube = _make_unit_cube()
+        self.pose_cube = _make_pose_cube()
+        self.pose_arrow = _make_pose_arrow()
+        self.origin_arrow = _make_origin_arrow()
 
         if self.viewer_window:
             self.viewer_window.init_display()
             glutDisplayFunc(self._display)  # Note: both windows call the same DisplayFunc
+
+        # if self.plotting_window:
+        #     self.plotting_window.init_display()
+        #     glutDisplayFunc(self._display)
+
 
     def mainloop(self):
         self.init_display()
@@ -1408,6 +1775,9 @@ class OpenGLViewer():
         sdk_robot.world.request_nav_memory_map(0.5)
         self._nav_map_handler = sdk_robot.world.add_event_handler(
             nav_memory_map.EvtNewNavMemoryMap, self.on_new_nav_memory_map)
+
+        self._pose_history_handler = sdk_robot.world.add_event_handler(robot.EvtPoseHistory, self.on_new_pose_history)
+
 
     def disconnect(self):
         """Called from the SDK when the program is complete and it's time to exit."""
@@ -1487,3 +1857,6 @@ class OpenGLViewer():
         # Called from SDK whenever a new nav memory map is available
         # Note: This is called from the SDK thread, so only access safe things
         self._nav_memory_map_queue.append(nav_memory_map)
+
+    def on_new_pose_history(self, evt, *, pose_history, **kw):
+        self._pose_history_queue.append(pose_history)
