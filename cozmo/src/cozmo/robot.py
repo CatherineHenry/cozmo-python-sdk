@@ -100,10 +100,12 @@ class EvtPoseHistory(event.Event):
 
 
 #: The minimum angle the robot's head can be set to
-MIN_HEAD_ANGLE = util.degrees(-25)
+MIN_HEAD_ANGLE = util.degrees(3)
+# MIN_HEAD_ANGLE = util.degrees(-25)
 
 #: The maximum angle the robot's head can be set to
-MAX_HEAD_ANGLE = util.degrees(44.5)
+# MAX_HEAD_ANGLE = util.degrees(44.5)
+MAX_HEAD_ANGLE = util.degrees(5)
 
 # The lowest height-above-ground that lift can be moved to in millimeters.
 MIN_LIFT_HEIGHT_MM = 32.0
@@ -205,7 +207,11 @@ class GoToPose(action.Action):
     def _encode(self):
         return _clad_to_engine_iface.GotoPose(x_mm=self.pose.position.x,
                                               y_mm=self.pose.position.y,
-                                              rad=self.pose.rotation.angle_z.radians)
+                                              rad=self.pose.rotation.angle_z.radians,
+                                              # motionProf=2.0,
+                                              level=1,
+                                              # useManualSpeed=True
+                                              )
 
 
 class GoToObject(action.Action):
@@ -2084,18 +2090,21 @@ class Robot(event.Dispatcher):
         '''
         self.pose_history.append(pose)
         # relative_pose_redefined_from_robot_origin = self.pose.define_pose_relative_this(pose)
-        relative_pose = self.pose.define_new_pose_relative_to_robot(pose)
+        self.update_pose_history(pose)
         if relative_to_robot:
             pose = self.pose.define_pose_relative_this(pose)
-        self.pose_history_relative_to_robot.append(relative_pose) # pose has to be relative to robot to draw in OpenGL
-        self.world.dispatch_event(EvtPoseHistory,
-                             pose_history=[self.pose_history_relative_to_robot, self.pose_history])
         action = self.go_to_pose_factory(pose=pose,
                 conn=self.conn, robot=self, dispatch_parent=self)
         self._action_dispatcher._send_single_action(action,
                                                     in_parallel=in_parallel,
                                                     num_retries=num_retries)
         return action
+
+    def update_pose_history(self, pose):
+        relative_pose = self.pose.define_new_pose_relative_to_robot(pose)
+        self.pose_history_relative_to_robot.append(relative_pose)  # pose has to be relative to robot to draw in OpenGL
+        self.world.dispatch_event(EvtPoseHistory,
+                                  pose_history=[self.pose_history_relative_to_robot, self.pose_history])
 
     def go_to_object(self, target_object, distance_from_object,
                      in_parallel=False, num_retries=0):
