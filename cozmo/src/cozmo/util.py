@@ -392,6 +392,46 @@ class Pose:
         rot = self.rotation / other
         return pose_quaternion(pos.x, pos.y, pos.z, rot.q0, rot.q1, rot.q2, rot.q3)
 
+    def define_new_pose_relative_to_robot(self, pose):
+        cozmo_x,cozmo_y,cozmo_z = self.position.x_y_z # robot current x,y,z
+        cozmo_angle_z = self.rotation.angle_z # robot current angle (w.r.t origin I assume)
+
+        x,y,z = pose.position.x_y_z
+        angle_z = pose.rotation.angle_z
+    #
+        new_x = x - cozmo_x
+        new_y = y - cozmo_y
+    #
+    #     # offsetX = new_x * math.cos(cozmo_angle_z.radians) + new_y * math.sin(cozmo_angle_z.radians)
+    #     # offsetY = -new_x * math.sin(cozmo_angle_z.radians) + new_y * math.cos(cozmo_angle_z.radians)
+    #
+    #     # # account for rotation?
+    #     # new_x = x * math.cos(cozmo_angle_z.radians - angle_z.radians) - y * math.sin(cozmo_angle_z.radians - angle_z.radians)
+    #     # new_y = x * math.sin(cozmo_angle_z.radians - angle_z.radians) - y * math.cos(cozmo_angle_z.radians - angle_z.radians)
+    #     #
+    #     # move_x = new_x - cozmo_x
+    #     # move_y = new_y - cozmo_y
+    #
+    #     # cos_angle = math.cos(angle_z.radians)
+    #     # sin_angle = math.sin(angle_z.radians)
+    #
+    #     # new_x = (x - cozmo_x) * math.cos(cozmo_angle_z.radians - angle_z.radians) - (y - cozmo_y) * math.sin(cozmo_angle_z.radians - angle_z.radians) + cozmo_x
+    #     # new_y = (x - cozmo_x) * math.sin(cozmo_angle_z.radians - angle_z.radians) - (y - cozmo_y) * math.cos(cozmo_angle_z.radians - angle_z.radians) + cozmo_y
+    #
+        # new_x = new_x * math.cos(cozmo_angle_z.radians)
+        # new_y = new_y * math.sin(cozmo_angle_z.radians)
+        new_angle = angle_z
+        #
+        # cos_angle = math.cos(cozmo_angle_z.radians)
+        # sin_angle = math.sin(cozmo_angle_z.radians)
+        # # https://www.cuemath.com/algebra/rotation-matrix/
+        # res_x = cozmo_x + (cos_angle * x) - (sin_angle * y)
+        # res_y = cozmo_y + (sin_angle * x) + (cos_angle * y)
+        # new_angle = cozmo_angle_z - angle_z
+        return Pose(x, y, z, angle_z=new_angle, origin_id=self._origin_id)
+    #     return Pose(new_x, new_y, 0, angle_z=angle_z, origin_id=self._origin_id)
+
+
     def define_pose_relative_this(self, new_pose):
         '''Creates a new pose such that new_pose's origin is now at the location of this pose.
 
@@ -410,6 +450,7 @@ class Pose:
 
         cos_angle = math.cos(angle_z.radians)
         sin_angle = math.sin(angle_z.radians)
+        # https://www.cuemath.com/algebra/rotation-matrix/
         res_x = x + (cos_angle * new_x) - (sin_angle * new_y)
         res_y = y + (sin_angle * new_x) + (cos_angle * new_y)
         res_z = z + new_z
