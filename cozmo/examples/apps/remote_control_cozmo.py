@@ -24,10 +24,14 @@ import io
 import json
 import math
 import sys
+import time
 from datetime import datetime
 
 import cv2
 import numpy as np
+from flask_socketio import SocketIO
+from werkzeug.serving import ThreadedWSGIServer
+from cozmo.util import degrees
 
 sys.path.append('../lib/')
 import flask_helpers
@@ -74,6 +78,7 @@ class RobotStateDisplay(cozmo.annotate.Annotator):
 
         pose = robot.pose
         print_line('Pose: Pos = <%.1f, %.1f, %.1f>' % pose.position.x_y_z)
+        print_line('Pose: Z = <%.2f>' % pose.position.z)
         print_line('Pose: Rot quat = <%.1f, %.1f, %.1f, %.1f>' % pose.rotation.q0_q1_q2_q3)
         print_line('Pose: angle_z = %.1f' % pose.rotation.angle_z.degrees)
         print_line('Pose: origin_id: %s' % pose.origin_id)
@@ -122,6 +127,16 @@ _gyro_driving_deadzone_ratio = 0.025
 
 _display_debug_annotations = DEBUG_ANNOTATIONS_ENABLED_ALL
 
+wsgi_server = ThreadedWSGIServer(
+    host='127.0.0.1',
+    port=8112,  # TODO: this is defined in run -- make them the same var
+    app=flask_app)
+socketio = SocketIO(
+    flask_app,
+    cors_allowed_origins = "*",
+    async_mode = 'threading')
+def webserver():
+    wsgi_server.serve_forever()
 
 def remap_to_range(x, x_min, x_max, out_min, out_max):
     '''convert x (in x_min..x_max range) to out_min..out_max range'''
@@ -477,6 +492,7 @@ def handle_index_page():
                     </td>
                     <td width=30></td>
                     <td valign=top>
+                        <b>Shutdown Server</b> : <button id="shutdownId" onClick=shutdownServerButtonClicked(this) style="font-size: 14px">Shutdown</button><br>
                         <h2>Controls:</h2>
 
                         <h3>Driving:</h3>
@@ -487,6 +503,7 @@ def handle_index_page():
                         (steer and head angle)<br>
                         (similar to an FPS game)<br>
                         <br>
+                        <b> Head Height </b> : <span id="headHeightSpan"></span> <br>
                         <b>T</b> : Move Head Up<br>
                         <b>G</b> : Move Head Down<br>
 
@@ -512,11 +529,13 @@ def handle_index_page():
                         <button id="saveImageButtonId" onClick=saveImageClicked(saveImageTextId) style="font-size: 14px">Save Image</button><br>
                         
                         <h3>Adjust Camera</h3>
-                        <b>Save</b> : Adjust camera settings: <br>
-                        <input type="text" name="adjustGain" id="adjustGainId" value="0.05">
+                        <b>Save</b> : Adjust camera settings. Gain ['''+ str(remote_control_cozmo.cozmo.camera.config.min_gain) + ''' - ''' + str(remote_control_cozmo.cozmo.camera.config.max_gain) + '''] 
+                         Exposure ['''+ str(remote_control_cozmo.cozmo.camera.config.min_exposure_time_ms) + ''' - ''' + str(remote_control_cozmo.cozmo.camera.config.max_exposure_time_ms) + ''']
+                         <br>
+                        <input type="text" name="adjustGain" id="adjustGainId" value="0.3">
                         <button id="saveGainSettingsButtonId" onClick=saveGainSettingsClicked(adjustGainId) style="font-size: 14px">Save Gain</button><br>
 
-                        <input type="text" name="adjustExposure" id="adjustExposureId" value="0.5">
+                        <input type="text" name="adjustExposure" id="adjustExposureId" value="25">
                         <button id="saveExposureSettingsButtonId" onClick=saveExposureSettingsClicked(adjustExposureId) style="font-size: 14px">Save Exposure</button><br>
                         
                     </td>
@@ -540,11 +559,24 @@ def handle_index_page():
                 var gUserAgent = window.navigator.userAgent;
                 var gIsMicrosoftBrowser = gUserAgent.indexOf('MSIE ') > 0 || gUserAgent.indexOf('Trident/') > 0 || gUserAgent.indexOf('Edge/') > 0;
                 var gSkipFrame = false;
+                var headHeight = -1
+                
+                setInterval(getUpdatedHeadHeight, 1000)
 
                 if (gIsMicrosoftBrowser) {
                     document.getElementById("cozmoImageMicrosoftWarning").style.display = "block";
                 }
+                
+                function getUpdatedHeadHeight()
+                {
+                    postHttpRequestWithCallback("getUpdatedHeadHeight", '', updateHeadHeight)
+                }
 
+                function updateHeadHeight(updatedValue){
+                headHeight = updatedValue
+                document.getElementById("headHeightSpan").innerHTML = headHeight
+                }
+                
                 function postHttpRequest(url, dataSet)
                 {
                     var xhr = new XMLHttpRequest();
@@ -620,7 +652,10 @@ def handle_index_page():
                     areDebugAnnotationsEnabled = gAreDebugAnnotationsEnabled
                     postHttpRequest("setAreDebugAnnotationsEnabled", {areDebugAnnotationsEnabled})
                 }
-
+                function shutdownServerButtonClicked(button)
+                {
+                    postHttpRequest("shutdown")
+                }
                 function onHeadlightButtonClicked(button)
                 {
                     gIsHeadlightEnabled = !gIsHeadlightEnabled;
@@ -742,10 +777,22 @@ def handle_index_page():
                         event.cancelBubble = true
                     }
                 }
+                                
+                function postHttpRequestWithCallback(url, dataSet, callback)
+                {
+                    var xhr = new XMLHttpRequest();
+                    xhr.onreadystatechange = () => {
+                      if (xhr.readyState === 4) {
+                        callback(xhr.response);
+                      }
+                    };
+                    xhr.open("POST", url, true);
+                    xhr.send( JSON.stringify( dataSet ) ); 
+                }
                 
                 function saveImageClicked(textField)
                 {
-                fileName = textField.value
+                fileName = headHeight + "_" + textField.value
                 postHttpRequest("saveImage", {fileName})
                 }   
                 
@@ -828,10 +875,28 @@ def handle_key_event(key_request, is_key_down):
                                         is_key_down=is_key_down)
     return ""
 
+@flask_app.route('/seriouslykill', methods=['POST'])
+def seriouslykill():
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        raise RuntimeError('Not running with the Werkzeug Server')
+    func()
+    return "Shutting down..."
+
 @flask_app.route('/shutdown', methods=['POST'])
 def shutdown():
-    flask_helpers.shutdown_flask(request)
+    # https://github.com/pallets/werkzeug/issues/2284
+    # Note video won't stop -- something about the image streaming socket staying open even though flask server was stopped
+    wsgi_server.shutdown()
+
+    # requests.post(f"{request.url_root}/seriouslykill")
+    # flask_helpers.shutdown_flask(request)
     return ""
+
+@flask_app.route('/getUpdatedHeadHeight', methods=['POST'])
+def getUpdatedHeadHeight():
+    return str(remote_control_cozmo.cozmo.head_angle.degrees)
+
 
 @flask_app.route('/mousemove', methods=['POST'])
 def handle_mousemove():
@@ -957,6 +1022,7 @@ def handle_sayText():
 @flask_app.route('/updateCozmo', methods=['POST'])
 def handle_updateCozmo():
     if remote_control_cozmo:
+        print(f"[Curent] Exposure: {remote_control_cozmo.cozmo.camera.exposure_ms}, Gain: {remote_control_cozmo.cozmo.camera.gain}")
         remote_control_cozmo.update()
         action_queue_text = ""
         i = 1
@@ -979,11 +1045,12 @@ def handle_save_image():
             # Scale the camera image down to fit on Cozmo's face
             # resized_image = latest_image.raw_image.resize(face_dimensions,
             #                                               Image.BICUBIC)
-
+            date_timestamp = datetime.now().strftime('%m_%d')
+            imwrite_path = f"./remote_control_saved_images/{date_timestamp}/{file_name}"
             # imwrite_path = f"./remote_control_saved_images/{date_timestamp}_{file_name}"
-            # imwrite_path = f"./remote_control_saved_images/{file_name}"
-            date_timestamp = datetime.now().strftime('%m_%d_%H_%M_%S')
-            imwrite_path = f"./remote_control_saved_images/{date_timestamp}.png"
+            if file_name == "" or file_name is None:
+                date_timestamp = datetime.now().strftime('%m_%d_%H_%M_%S')
+                imwrite_path = f"./remote_control_saved_images/{date_timestamp}.png"
 
             # img = preprocess_image(img_raw, (512, 512))
 
@@ -1010,11 +1077,16 @@ def adjust_camera_gain():
     gain_amount = float(message['gain'])
     if remote_control_cozmo:
         exposure_time = remote_control_cozmo.cozmo.camera.exposure_ms
-        min_gain = remote_control_cozmo.cozmo.camera.config.min_gain
-        max_gain = remote_control_cozmo.cozmo.camera.config.max_gain
-        actual_gain = (1 - gain_amount) * min_gain + gain_amount * max_gain
-        remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure_time, actual_gain)
-        print(f"Actual gain: {actual_gain}")
+        # min_gain = remote_control_cozmo.cozmo.camera.config.min_gain
+        # max_gain = remote_control_cozmo.cozmo.camera.config.max_gain
+        # actual_gain = (1 - gain_amount) * min_gain + gain_amount * max_gain
+        # remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure_time, actual_gain)
+        print(f"[Before Setting] Exposure: {remote_control_cozmo.cozmo.camera.exposure_ms}, Gain: {remote_control_cozmo.cozmo.camera.gain}")
+        remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure_time, gain_amount)
+        print(f"[To Set] Exposure (current): {exposure_time}, Gain (just set): {gain_amount}")
+        print(f"[After Setting] Exposure: {remote_control_cozmo.cozmo.camera.exposure_ms}, Gain: {remote_control_cozmo.cozmo.camera.gain}")
+
+        # print(f"Actual gain: {gain_amount}")
     return ""
 
 @flask_app.route('/adjustCameraExposure', methods=['POST'])
@@ -1023,26 +1095,39 @@ def adjust_camera_exposure():
     exposure_amount = float(message['exposure'])
     if remote_control_cozmo:
         gain_amount = remote_control_cozmo.cozmo.camera.gain
-        min_exposure = remote_control_cozmo.cozmo.camera.config.min_exposure_time_ms
-        max_exposure = remote_control_cozmo.cozmo.camera.config.max_exposure_time_ms
-        exposure_time = (1 - exposure_amount) * min_exposure + exposure_amount * max_exposure
-        print(f"Exposure time: {exposure_time}")
-        remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure_time, gain_amount)
+        # min_exposure = remote_control_cozmo.cozmo.camera.config.min_exposure_time_ms
+        # max_exposure = remote_control_cozmo.cozmo.camera.config.max_exposure_time_ms
+        # exposure_time = (1 - exposure_amount) * min_exposure + exposure_amount * max_exposure
+        # print(f"Exposure time: {exposure_time}")
+        # remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure_time, gain_amount)
+        print(f"[Before Setting] Exposure: {remote_control_cozmo.cozmo.camera.exposure_ms}, Gain: {remote_control_cozmo.cozmo.camera.gain}")
+        remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure_amount, gain_amount)
+        print(f"[To set] Exposure (current): {exposure_amount}, Gain (just set): {gain_amount}")
+        print(f"[After Setting] Exposure: {remote_control_cozmo.cozmo.camera.exposure_ms}, Gain: {remote_control_cozmo.cozmo.camera.gain}")
+
+
+        # print(f"Exposure time: {exposure_amount}")
+
     return ""
 
 def run(sdk_conn):
     robot = sdk_conn.wait_for_robot()
     robot.world.image_annotator.add_annotator('robotState', RobotStateDisplay)
     robot.enable_device_imu(True, True, True)
+    # robot.set_head_angle(degrees(10), accel=10.0, max_speed=10.0, duration=1,
+    #                      warn_on_clamp=True, in_parallel=False, num_retries=2).wait_for_completed()
+    # robot.set_head_angle(degrees(10), accel=10.0, max_speed=10.0, duration=1, warn_on_clamp=True, in_parallel=True, num_retries=2).wait_for_completed()
+    robot.set_lift_height(0.0, in_parallel=True).wait_for_completed()
+    # cozmo_cam = CozmoCameraModule(robot, exposure=0.4, gain=0.03)
 
     global remote_control_cozmo
     remote_control_cozmo = RemoteControlCozmo(robot)
     # don't start with freeplay behaviour on
     remote_control_cozmo.cozmo.stop_freeplay_behaviors()
     # Turn on image receiving by the camera
-    exposure_amount = 0.5
+    exposure_amount = 0.4
     # exposure_amount = 0.9 # nice settings for when in color at night. todo: test during day
-    gain_amount = 0.05
+    gain_amount = 0.03
     # gain_amount = 0.01 # nice settings for when in color at night: todo: test during day
 
     # exposure_amount = 0.4 # for finding cube with light symbol
@@ -1053,24 +1138,45 @@ def run(sdk_conn):
 
     robot.camera.color_image_enabled = True
     # robot.camera.color_image_enabled = False
-    robot.camera.enable_auto_exposure = False
+    # robot.camera.enable_auto_exposure(True) # do we need to "reset" the robot exposure between runs?
+    robot.camera.enable_auto_exposure(False)
+    time.sleep(10)
 
     min_exposure = robot.camera.config.min_exposure_time_ms
     max_exposure = robot.camera.config.max_exposure_time_ms
 
-    print(f"Min exposure: {min_exposure}, Max exposure: {max_exposure}")
-    exposure_time = (1 - exposure_amount) * min_exposure + exposure_amount * max_exposure
-    print(f"Exposure time: {exposure_time}")
+    # print(f"Min exposure: {min_exposure}, Max exposure: {max_exposure}")
+    # exposure_time = (1 - exposure_amount) * min_exposure + exposure_amount * max_exposure
+    # print(f"Exposure time: {exposure_time}")
+
     # Lerp gain
     min_gain = robot.camera.config.min_gain
     max_gain = robot.camera.config.max_gain
     print(f"Min gain: {min_gain}, Max gain: {max_gain}")
 
-    actual_gain = (1 - gain_amount) * min_gain + gain_amount * max_gain
-    print(f"Actual gain: {actual_gain}")
-    robot.camera.set_manual_exposure(exposure_time, actual_gain)
+    # actual_gain = (1 - gain_amount) * min_gain + gain_amount * max_gain
+    # print(f"Actual gain: {actual_gain}")
 
-    flask_helpers.run_flask(flask_app, host_port=8112)
+    # robot.camera.set_manual_exposure(exposure_time, actual_gain)
+    exposure = 32
+    gain = 3.6
+    print(f"[Before Setting] Exposure: {remote_control_cozmo.cozmo.camera.exposure_ms}, Gain: {remote_control_cozmo.cozmo.camera.gain}")
+    remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure, gain)
+    time.sleep(10)
+    remote_control_cozmo.cozmo.camera.set_manual_exposure(exposure, gain)
+
+
+    print(f"[To set] Exposure (current): {exposure_amount}, Gain (just set): {gain_amount}")
+    print(f"[After Setting] Exposure: {remote_control_cozmo.cozmo.camera.exposure_ms}, Gain: {remote_control_cozmo.cozmo.camera.gain}")
+
+# flask_helpers.run_flask(flask_app, host_port=8112)
+    socketio.start_background_task(webserver)
+    host_ip="127.0.0.1"
+    host_port = 8112
+    flask_helpers._delayed_open_web_browser("http://" + host_ip + ":" + str(host_port), delay=1)
+
+    time.sleep(300)
+    # socketio.run(flask_app, port=8113, debug=True, allow_unsafe_werkzeug=True)
 
 if __name__ == '__main__':
     cozmo.setup_basic_logging()
