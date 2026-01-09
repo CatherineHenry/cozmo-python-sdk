@@ -13,3 +13,6 @@ htmlcov
 /tests/lint/logs
 # pycharm 
 .idea
+
+
+*.png
