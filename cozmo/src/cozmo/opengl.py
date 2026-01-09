@@ -823,7 +823,7 @@ class OpenGLViewer():
                                         'P: Show pose history',
                                         'O: Shade pose history (opacity)',
                                         'B: Show Cozmo (bot)',
-                                        'Note: Smallest square is 10cm',
+                                        'Note: Smallest square is 10mm',
                                         '''Note: Nav-Map child orientation is;     +---+----+---+
                                         | ^ | 2  | 0 |
                                         +---+----+---+
@@ -1069,7 +1069,7 @@ class OpenGLViewer():
         glEnable(GL_BLEND)
 
         glMultMatrixf(robot_matrix.in_row_order)
-
+        # Scale the obj mesh dimensions from cm to mm (we are treating 1 mm as the base unit for this world rendering)
         robot_scale_amt = 10.0  # cm to mm
         # glScalef function produces a general scaling along the x, y, and z axes.
         # The three arguments indicate the desired scale factors along each of the three axes.
@@ -1260,7 +1260,7 @@ class OpenGLViewer():
         fov = 45.0
         aspect_ratio = window.width / window.height
         near_clip_plane = 1.0
-        far_clip_plane = 1000.0
+        far_clip_plane = 5000.0
         gluPerspective(fov, aspect_ratio, near_clip_plane, far_clip_plane)
 
         # Switch to model matrix for rendering everything
@@ -1278,7 +1278,8 @@ class OpenGLViewer():
         glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
         glEnable(GL_LIGHT0)
 
-        glScalef(0.1, 0.1, 0.1)  # mm to cm
+        # scale from mm to cm
+        # glScalef(0.1, 0.1, 0.1)  # 1 mm is 0.1 cm
 
         # Orient the camera
         self._calculate_camera_pos()
@@ -1322,7 +1323,10 @@ class OpenGLViewer():
                     glMultMatrixf(cube_matrix.in_row_order)
 
                     # Cube is drawn slightly larger than the 10mm to 1 cm scale, as the model looks small otherwise
-                    cube_scale_amt = 10.7
+                    # cube_scale_amt = 10.7
+                    # Catherine TODO: I removed "slightly" larger scaling
+                    cube_scale_amt = 10
+                    # Scale the obj mesh dimensions from cm to mm (we are treating 1 mm as the base unit for this world rendering)
                     glScalef(cube_scale_amt, cube_scale_amt, cube_scale_amt)
 
                     cube_obj.draw_all()
@@ -1337,7 +1341,8 @@ class OpenGLViewer():
                     face_matrix = face_pose.to_matrix()
                     glMultMatrixf(face_matrix.in_row_order)
 
-                    # Approximate size of a head
+                    # Approximate size of a head in mm
+                    # Because we are drawing a unit cube, the these are essentially 100*1mm, 25*1mm, and 100*1mm
                     glScalef(100, 25, 100)
 
                     FACE_OBJECT_COLOR = [0.5, 0.5, 0.5, 1.0]
@@ -1357,8 +1362,11 @@ class OpenGLViewer():
                              obj.y_size_mm * 0.5,
                              obj.z_size_mm * 0.5)
 
+                    # # Draw unit cube but scaled to the mm of the object
+                    # glScalef(obj.x_size_mm,
+                    #          obj.y_size_mm,
+                    #          obj.z_size_mm)
                     # Only draw solid object for observable custom objects
-
                     if obj.is_fixed:
                         # fixed objects are drawn as transparent outlined boxes to make
                         # it clearer that they have no effect on vision.
@@ -1367,6 +1375,10 @@ class OpenGLViewer():
                     else:
                         CUSTOM_OBJECT_COLOR = [1.0, 0.3, 0.3, 1.0]
                         self._draw_unit_cube(CUSTOM_OBJECT_COLOR, True)
+
+                    # # Draw all objects as solid, including custom objects
+                    # CUSTOM_OBJECT_COLOR = [1.0, 0.3, 0.3, 1.0]
+                    # self._draw_unit_cube(CUSTOM_OBJECT_COLOR, True)
 
                     glPopMatrix()
 
@@ -1384,15 +1396,11 @@ class OpenGLViewer():
                     for idx,past_pose in enumerate(pose_history[0]):
                         if past_pose is not None and past_pose.is_comparable(robot_pose):
                             glPushMatrix()
-                            glDisable(GL_LIGHTING) # so it shows as red from all angles
+                            glDisable(GL_LIGHTING)  # so it shows as red from all angles
 
                             pose_matrix = past_pose.to_matrix()
                             glMultMatrixf(pose_matrix.in_row_order) # this appears to make it so my pose arrow is drawn with 0,0 being the pose specified
 
-                            # # Approximate size of a head
-                            # glScalef(100, 25, 100)
-
-                            # glScalef(0.1, 0.1, 0.1)  # mm to cm
                             if self._shade_pose_by_age:
                                 CUBE_OBJECT_COLOR = [1.0, 0.0, 0.0, idx/len(pose_history[0])] # red
                             else:
