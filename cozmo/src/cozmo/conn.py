@@ -167,6 +167,8 @@ class CozmoConnection(event.Dispatcher, clad_protocol.CLADProtocol):
         #: An :class:`cozmo.anim.AnimationNames` object that references all
         #: available animation names
         self.anim_names = self.anim_names_factory(self)
+        self.has_been_delocalized = False
+        self.off_tread_state = 0 # 1 means robot is lifted away from surface, 0 means robot is on a surface
 
 
     #### Private Methods ####
@@ -234,6 +236,12 @@ class CozmoConnection(event.Dispatcher, clad_protocol.CLADProtocol):
             if evttype is None:
                 logger.error('Received unknown CLAD message %s', event_name)
                 return
+            # Added this so we can wait to start execution until the robot has been delocalized, this is the only (easy) way to
+            # ensure the NavMemoryMap is reset between runs without restarting the engine or racing to move the robot before execution starts
+            if event_name == '_MsgRobotDelocalized':
+                self.has_been_delocalized = True
+            if event_name == '_MsgRobotOffTreadsStateChanged':
+                self.off_tread_state = msg.treadsState
 
             # Dispatch messages to the robot if they either:
             # a) are explicitly white listed in FORCED_ROBOT_MESSAGES
