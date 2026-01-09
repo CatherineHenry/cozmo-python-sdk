@@ -124,8 +124,9 @@ class ImageText:
             The same :class:`PIL.ImageDraw.ImageDraw` object as was passed-in with text applied.
         '''
         (bx1, by1, bx2, by2) = bounds
-        text_width, text_height = draw.textsize(self.text, font=self.font)
-
+        left, top, right, bottom, = draw.textbbox(xy=(0, 0), text=self.text, font=self.font)  # can set xy to 00 because I only want height width
+        text_height = abs(right - left)
+        text_width = abs(top - bottom)
         if self.position & TOP:
             y = by1
         else:
