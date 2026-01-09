@@ -444,6 +444,8 @@ class World(event.Dispatcher):
     def _recv_msg_robot_delocalized(self, evt, *, msg):
         # Invalidate the pose for every object
         logger.info("Robot delocalized - invalidating poses for all objects")
+        # Catherine TODO ...can't think of a reason to not reset. because pose would be different meaning (I think?) once delocalized? could be interesting to keep tho
+        self.robot.pose_history = []
         for obj in self._objects.values():
             obj.pose.invalidate()
 
@@ -974,6 +976,8 @@ class World(event.Dispatcher):
         Returns:
             A :class:`cozmo.objects.FixedCustomObject` instance with the specified dimensions and pose.
         '''
+
+        relative_pose = self.robot.pose.define_new_pose_relative_to_robot(pose) # Catherine TODO: idk about this
         # Override the origin of the pose to be the same as the robot's. This will make sure they are in
         # the same space in the engine every time.
         if use_robot_origin:
@@ -986,6 +990,7 @@ class World(event.Dispatcher):
         self.conn.send_msg(msg)
         #pylint: disable=no-member
         response = await self.wait_for(_clad._MsgCreatedFixedCustomObject)
+        # fixed_custom_object = objects.FixedCustomObject(pose, x_size_mm, y_size_mm, z_size_mm, response.msg.objectID)
         fixed_custom_object = objects.FixedCustomObject(pose, x_size_mm, y_size_mm, z_size_mm, response.msg.objectID)
         self._objects[fixed_custom_object.object_id] = fixed_custom_object
         return fixed_custom_object
@@ -1094,7 +1099,6 @@ class World(event.Dispatcher):
         """
         msg = _clad_to_engine_iface.SetMemoryMapBroadcastFrequency_sec(frequency_s)
         self.conn.send_msg(msg)
-
 
 class CameraImage:
     '''A single image from Cozmo's camera.
