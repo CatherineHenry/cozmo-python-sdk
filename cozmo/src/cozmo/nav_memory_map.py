@@ -37,7 +37,7 @@ from . import event
 from . import logger
 from . import util
 from ._clad import CladEnumWrapper, _clad_to_game_iface
-
+import numpy as np
 
 class EvtNewNavMemoryMap(event.Event):
     '''Dispatched when a new memory map is received.'''
@@ -320,3 +320,27 @@ class NavMemoryMapGrid:
         # Convert content int to our enum representation
         content = NodeContentTypes.find_by_id(content)
         self._root_node._add_child(content, depth)
+
+    def quad_tree_safe_and_unsafe_coordinates(self, nav_memory_map_node, safe_coordinates: list, unsafe_coordinates: list):
+        if nav_memory_map_node.children is not None:
+            self.quad_tree_safe_and_unsafe_coordinates(nav_memory_map_node.children[3], safe_coordinates, unsafe_coordinates)
+            self.quad_tree_safe_and_unsafe_coordinates(nav_memory_map_node.children[0], safe_coordinates, unsafe_coordinates)
+            self.quad_tree_safe_and_unsafe_coordinates(nav_memory_map_node.children[1], safe_coordinates, unsafe_coordinates)
+            self.quad_tree_safe_and_unsafe_coordinates(nav_memory_map_node.children[2], safe_coordinates, unsafe_coordinates)
+
+        else:
+            content = "NA" if nav_memory_map_node.content is None else nav_memory_map_node.content.name  # leaf node, so should have content!
+            if content in ["ClearOfCliff", "ClearOfObstacle"]:
+                center = (nav_memory_map_node.center.x, nav_memory_map_node.center.y)
+                size = nav_memory_map_node.size
+                min_bounds = np.array([center[0] - (size/2), center[1] - (size/2)])  # x, y
+                max_bounds = np.array( [center[0] + (size/2), center[1] + (size/2)])  # x,y
+                safe_coordinates.append(np.array([min_bounds, max_bounds]))
+
+            elif content in ["ObstacleCube"]:#, "ObstacleCharger", "Cliff", "VisionBorder"]:
+                center = (nav_memory_map_node.center.x, nav_memory_map_node.center.y)
+                size = nav_memory_map_node.size
+                min_bounds = np.array([center[0] - (size/2), center[1] - (size/2)])  # x, y
+                max_bounds = np.array( [center[0] + (size/2), center[1] + (size/2)])  # x,y
+                unsafe_coordinates.append(np.array([min_bounds, max_bounds]))
+
