@@ -750,10 +750,12 @@ class OpenGLViewer():
         show_viewer_controls (bool): Specifies whether to draw controls on the view.
     """
     def __init__(self, enable_camera_view, show_viewer_controls=True, enable_plotting=False):
+        self._progress_text = ''
         # Queues from SDK thread to OpenGL thread
         self._img_queue = collections.deque(maxlen=1)
         self._nav_memory_map_queue = collections.deque(maxlen=1)
         self._pose_history_queue = collections.deque(maxlen=1)
+        self._intended_pose_history_queue = collections.deque(maxlen=1)
         self._world_frame_queue = collections.deque(maxlen=1)
         # Queue from OpenGL thread to SDK thread
         self._input_intent_queue = collections.deque(maxlen=1)
@@ -810,7 +812,12 @@ class OpenGLViewer():
 
         # Pose history
         self._show_pose_history = False
+        self._show_intended_pose_history = False
+        self._shade_pose_by_region = False
+        self._shade_pose_by_learning_progress = False
         self._shade_pose_by_age = False
+        self._region_colors = []
+        self._learning_progress_colors = []
 
         #Cozmo
         self._show_cozmo = True
@@ -1321,7 +1328,7 @@ class OpenGLViewer():
             robot_frame = world_frame.robot_frame
             robot_pose = robot_frame.pose
             self._draw_text(GLUT_BITMAP_9_BY_15, f"(x:{round(robot_pose.position.x,3)}, y:{round(robot_pose.position.y,3)})[{round(robot_pose.rotation.angle_z.degrees, 2)}°]", 0, 6)
-
+            self._draw_text(GLUT_BITMAP_9_BY_15, self._progress_text, 0, 20)
             # # Render the cubes
             # for i in range(3):
             #     cube_obj = self.cube_objects[i]
@@ -1421,6 +1428,10 @@ class OpenGLViewer():
 
                             if self._shade_pose_by_age:
                                 CUBE_OBJECT_COLOR = [1.0, 0.0, 0.0, idx/len(pose_history[0])] # red
+                            elif self._shade_pose_by_region:
+                                CUBE_OBJECT_COLOR = self._region_colors[idx] # whatever color for the region
+                            elif self._shade_pose_by_learning_progress:
+                                CUBE_OBJECT_COLOR = self._learning_progress_colors[idx]
                             else:
                                 CUBE_OBJECT_COLOR = [1.0, 0.0, 0.0, 1.0] # red
 
@@ -1430,6 +1441,37 @@ class OpenGLViewer():
                                 # self._draw_unit_cube([0.5, 0.5, 0.5, 1.0], True)
                                 self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
                                 self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, f"({round(pose_history[1][idx].position.x,2)}, {round(pose_history[1][idx].position.y,2)})[{round(pose_history[1][idx].rotation.angle_z.degrees, 2)}°]", 0, 0, 2)
+
+                            glPopMatrix()
+
+            try:
+                intended_pose_history = self._intended_pose_history_queue.popleft()  # type: WorldRenderFrame
+                self._latest_intended_pose_history = intended_pose_history
+            except IndexError:
+                intended_pose_history = self._latest_intended_pose_history
+                pass
+
+            if self._show_intended_pose_history:
+                if intended_pose_history is not None:
+                    for idx,past_pose in enumerate(intended_pose_history[0]):
+                        if past_pose is not None and past_pose.is_comparable(robot_pose):
+                            glPushMatrix()
+                            glDisable(GL_LIGHTING)  # so it shows as red from all angles
+
+                            pose_matrix = past_pose.to_matrix()
+                            glMultMatrixf(pose_matrix.in_row_order) # this appears to make it so my pose arrow is drawn with 0,0 being the pose specified
+
+                            if self._shade_pose_by_age:
+                                CUBE_OBJECT_COLOR = [0.0, 1.0, 0.0, idx/len(pose_history[0])] # red
+                            elif self._shade_pose_by_region:
+                                CUBE_OBJECT_COLOR = self._region_colors[idx] # whatever color for the region
+                            elif self._shade_pose_by_learning_progress:
+                                CUBE_OBJECT_COLOR = self._learning_progress_colors[idx]
+                            else:
+                                CUBE_OBJECT_COLOR = [0.0, 1.0, 0.0, 1.0] # red
+
+                            # glRotate(past_pose.rotation.angle_z.degrees, 0, 0)
+                            self._draw_pose_arrow(CUBE_OBJECT_COLOR, draw_solid=True)
 
                             glPopMatrix()
 
@@ -1617,8 +1659,14 @@ class OpenGLViewer():
             self._show_coordinates = not self._show_coordinates
         elif ord(key) == 80 or ord(key) == 112: # p or P key
             self._show_pose_history = not self._show_pose_history
+        elif ord(key) == 73 or ord(key) == 105: # i or I key
+            self._show_intended_pose_history = not self._show_intended_pose_history
         elif ord(key) == 79 or ord(key) == 111: # o or O key
             self._shade_pose_by_age = not self._shade_pose_by_age
+        elif ord(key) == 81 or ord(key) == 113: # q or Q key
+            self._shade_pose_by_region = not self._shade_pose_by_region
+        elif ord(key) == 86 or ord(key) == 118:
+            self._shade_pose_by_learning_progress = not self._shade_pose_by_learning_progress
         elif ord(key) == 66 or ord(key) == 98: # b or B key
             self._show_cozmo = not self._show_cozmo
 
@@ -1882,7 +1930,7 @@ class OpenGLViewer():
         # Note: This is called from the SDK thread, so only access safe things:
         # viewer_window will already be created, and reading width/height is safe
         # (worst case it'll be a frame old, or e.g just width/height updated)
-        fit_size=(self.viewer_window.width, self.viewer_window.height)
+        # fit_size=(self.viewer_window.width, self.viewer_window.height)
         # annotated_image = image.annotate_image(fit_size=fit_size)
         self._img_queue.append(image)
 
