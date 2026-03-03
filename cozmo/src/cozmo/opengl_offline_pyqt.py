@@ -46,6 +46,7 @@ __all__ = ['DynamicTexture', 'LoadedObjFile', 'OpenGLViewer', 'OpenGLWindow',
 
 import collections
 import math
+import random
 from math import cos, sin, pi
 import time
 from pkg_resources import resource_stream
@@ -64,6 +65,24 @@ from . import robot
 from . import util
 from . import world
 from .robot import LiftPosition
+
+
+from matplotlib.backends.backend_qtagg import FigureCanvas
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
+from matplotlib.figure import Figure
+from PySide6.QtWidgets import (
+    QApplication,
+    QWidget,
+    QDoubleSpinBox,
+    QVBoxLayout,
+    QHBoxLayout,
+)
+import sys
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QApplication
+from PySide6.QtOpenGL import QOpenGLWindow
+from OpenGL.GL import glClear, glClearColor, GL_COLOR_BUFFER_BIT
+
 
 
 # Check if OpenGL imported correctly and bound to a valid GLUT implementation
@@ -101,11 +120,6 @@ if not _verify_glut_init():
 
 
 _resource_package = __name__  # All resources are in subdirectories from this file's location
-
-
-# Global viewer instance
-opengl_viewer = None  # type: OpenGLViewer
-
 
 class DynamicTexture:
     """Wrapper around An OpenGL Texture that can be dynamically updated."""
@@ -585,58 +599,58 @@ def _make_unit_cube():
     return new_gl_list
 
 
-class OpenGLWindow():
-    """A Window displaying an OpenGL viewport.
-
-    Args:
-        x (int): The initial x coordinate of the window in pixels.
-        y (int): The initial y coordinate of the window in pixels.
-        width (int): The initial height of the window in pixels.
-        height (int): The initial height of the window in pixels.
-        window_name (str): The name / title for the window.
-        is_3d (bool): True to create a Window for 3D rendering.
-    """
-    def __init__(self, x, y, width, height, window_name, is_3d):
-        self._pos = (x, y)
-        #: int: The width of the window
-        self.width = width
-        #: int: The height of the window
-        self.height = height
-        self.gl_window = None # this was set to _gl_window, not sure why since that value was unused but gl_window *is used*. Change bcz I need access
-
-        self._window_name = window_name
-        self._is_3d = is_3d
+# class OpenGLWindow():
+#     """A Window displaying an OpenGL viewport.
+#
+#     Args:
+#         x (int): The initial x coordinate of the window in pixels.
+#         y (int): The initial y coordinate of the window in pixels.
+#         width (int): The initial height of the window in pixels.
+#         height (int): The initial height of the window in pixels.
+#         window_name (str): The name / title for the window.
+#         is_3d (bool): True to create a Window for 3D rendering.
+#     """
+#     def __init__(self, x, y, width, height, window_name, is_3d):
+#         self._pos = (x, y)
+#         #: int: The width of the window
+#         self.width = width
+#         #: int: The height of the window
+#         self.height = height
+#         self.gl_window = None # this was set to _gl_window, not sure why since that value was unused but gl_window *is used*. Change bcz I need access
+#
+#         self._window_name = window_name
+#         self._is_3d = is_3d
 
     # def close(self):
     #     sys.exit
 
-    def init_display(self):
-        """Initialze the OpenGL display parts of the Window.
-
-        Warning:
-            Must be called on the same thread as OpenGL (usually the main thread),
-            and after glutInit().
-        """
-
-        glutInitWindowSize(self.width, self.height)
-        glutInitWindowPosition(*self._pos)
-
-        self.gl_window = glutCreateWindow(self._window_name)
-
-        # glutWMCloseFunc(self.close)
-
-        if self._is_3d:
-            glClearColor(0, 0, 0, 0)
-            glEnable(GL_DEPTH_TEST)
-            glShadeModel(GL_SMOOTH)
-
-        glutReshapeFunc(self._reshape)
-
-    def _reshape(self, width, height):
-        # Called from OpenGL whenever this window is resized.
-        self.width = width
-        self.height = height
-        glViewport(0, 0, width, height)
+    # def init_display(self):
+    #     """Initialze the OpenGL display parts of the Window.
+    #
+    #     Warning:
+    #         Must be called on the same thread as OpenGL (usually the main thread),
+    #         and after glutInit().
+    #     """
+    #
+    #     glutInitWindowSize(self.width, self.height)
+    #     glutInitWindowPosition(*self._pos)
+    #
+    #     self.gl_window = glutCreateWindow(self._window_name)
+    #
+    #     # glutWMCloseFunc(self.close)
+    #
+    #     if self._is_3d:
+    #         glClearColor(0, 0, 0, 0)
+    #         glEnable(GL_DEPTH_TEST)
+    #         glShadeModel(GL_SMOOTH)
+    #
+    #     glutReshapeFunc(self._reshape)
+    #
+    # def _reshape(self, width, height):
+    #     # Called from OpenGL whenever this window is resized.
+    #     self.width = width
+    #     self.height = height
+    #     glViewport(0, 0, width, height)
 
 
 class RobotRenderFrame():
@@ -725,75 +739,167 @@ class WorldRenderFrame():
                 self.custom_object_frames.append(CustomObjectRenderFrame(obj, is_fixed))
 
 
-class RobotControlIntents():
-    """Input intents for controlling the robot.
 
-    These are sent from the OpenGL thread, and consumed by the SDK thread for
-    issuing movement commands on Cozmo (to provide a remote-control interface).
+class MplCanvas(FigureCanvasQTAgg):
+
+    def __init__(self, parent=None, width=5, height=4, dpi=100):
+        fig = Figure(figsize=(width, height), dpi=dpi)
+        self.axes = fig.add_subplot(111)
+        super().__init__(fig)
+
+class PlotWindow(QWidget):
     """
-    def __init__(self, left_wheel_speed=0.0, right_wheel_speed=0.0,
-                 lift_speed=0.0, head_speed=0.0):
-        self.left_wheel_speed = left_wheel_speed
-        self.right_wheel_speed = right_wheel_speed
-        self.lift_speed = lift_speed
-        self.head_speed = head_speed
-
-
-class OpenGLViewer():
-    """OpenGL based 3D Viewer.
-
-    Handles rendering of both a 3D world view and a 2D camera window.
-
-    Args:
-        enable_camera_view (bool): True to also open a 2nd window to display
-            the live camera view.
-        show_viewer_controls (bool): Specifies whether to draw controls on the view.
+    This "window" is a QWidget. If it has no parent, it
+    will appear as a free-floating window as we want.
     """
-    def __init__(self, enable_camera_view, show_viewer_controls=True, enable_plotting=False):
-        self._progress_text = ''
+    def __init__(self):
+        super().__init__()
+
+        n_data = 50
+        self.xdata = list(range(n_data))
+        self.ydata = [random.randint(0, 10) for i in range(n_data)]
+        # Create canvas object
+        self.canvas = MplCanvas()
+        # Create toolbar, passing canvas as first parament, parent (self, the MainWindow) as second.
+        toolbar = NavigationToolbar(self.canvas, self)
+
+        self.vbl = QVBoxLayout()         # Set box for plotting
+        self.vbl.addWidget(toolbar)
+        self.vbl.addWidget(self.canvas)
+        self.setLayout(self.vbl)
+
+    def update_plot(self):
+        # Drop off the first y element, append a new one.
+        self.ydata = self.ydata[1:] + [random.randint(0, 10)]
+        self.canvas.axes.cla()  # Clear the canvas.
+        self.canvas.axes.plot(self.xdata, self.ydata, 'r')
+        # Trigger the canvas to update and redraw.
+        self.canvas.draw()
+
+class CameraViewWindow(QOpenGLWindow):
+    """
+    This "window" is a QWidget. If it has no parent, it
+    will appear as a free-floating window as we want.
+    """
+    def __init__(self, img_queue):
+        super().__init__()
+        self._img_queue = img_queue
+
+
+    def initializeGL(self):
+        glClearColor(0, 0, 0, 0)
+        self._camera_view_texture = None  # type: DynamicTexture
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update) # Triggers paintGL
+        self.timer.start(16) # ~60 FPS (1000ms / 60)
+
+
+    def paintGL(self):
+        if self._camera_view_texture is None:
+            self._camera_view_texture = DynamicTexture()
+
+        target_width = self.width()
+        target_height = self.height()
+        target_aspect = 320 / 240  # (Camera-feed resolution and aspect ratio)
+        max_u = 1.0
+        max_v = 1.0
+        if (target_width / target_height) < target_aspect:
+            target_height = target_width / target_aspect
+            max_v *= target_height / self.height()
+        elif (target_width / target_height) > target_aspect:
+            target_width = target_height * target_aspect
+            max_u *= target_width / self.width()
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glEnable(GL_TEXTURE_2D)
+
+        # Try getting a new image if one has been added
+        image = None
+        try:
+            image = self._img_queue.popleft()
+        except IndexError:
+            # no new image - queue is empty
+            pass
+
+        if image:
+            # There's a new image - update the texture
+            self._camera_view_texture.update(image)
+        else:
+            # keep using the most recent texture
+            self._camera_view_texture.bind()
+
+        # Display the image as a tri-strip with 4 vertices
+        glBegin(GL_TRIANGLE_STRIP)
+        # (0,0) = Top Left, (1,1) = Bottom Right
+        # left, bottom
+        glTexCoord2f(0.0, 1.0)
+        glVertex2f(-max_u, -max_v)
+        # right, bottom
+        glTexCoord2f(1.0, 1.0)
+        glVertex2f(max_u, -max_v)
+        # left, top
+        glTexCoord2f(0.0, 0.0)
+        glVertex2f(-max_u, max_v)
+        # right, top
+        glTexCoord2f(1.0, 0.0)
+        glVertex2f(max_u, max_v)
+        glEnd()
+
+        glDisable(GL_TEXTURE_2D)
+
+        glutSwapBuffers()
+
+
+
+class SimpleGLWindow(QOpenGLWindow):
+
+    def __init__(self, nav_memory_map_queue, world_frame_queue, pose_history_queue, img_queue):
+        super().__init__()
         # Queues from SDK thread to OpenGL thread
-        self._img_queue = collections.deque(maxlen=1)
-        self._nav_memory_map_queue = collections.deque(maxlen=1)
-        self._pose_history_queue = collections.deque(maxlen=1)
-        self._intended_pose_history_queue = collections.deque(maxlen=1)
-        self._world_frame_queue = collections.deque(maxlen=1)
+        # self._intended_pose_history_queue = collections.deque(maxlen=1)
+
+        self._nav_memory_map_queue = nav_memory_map_queue
+        self._world_frame_queue = world_frame_queue
+        self._pose_history_queue = pose_history_queue
+
+        # self._progress_text = ''
+
+        self.camera_view_window = CameraViewWindow(img_queue)
+        self.camera_view_window.show()
+
+        self.plot_window = PlotWindow()
+        self.plot_window.show()
+
+
+    def initializeGL(self):
+        glClearColor(0, 0, 0, 0)
+        glEnable(GL_DEPTH_TEST)
+        glShadeModel(GL_SMOOTH)
+
+        #         glutInitContextVersion (3, 2)
+        #         glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
+
+        #         glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
+
+        #         glutInitDisplayMode(GLUT_3_2_CORE_PROFILE | GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
+
+        # Load 3D objects
+        _cozmo_obj = LoadedObjFile("cozmo.obj")
+        self.cozmo_object = RenderableObject(_cozmo_obj)
+
+        self.unit_cube = _make_unit_cube()
+        self.pose_cube = _make_pose_cube()
+        self.pose_arrow = _make_pose_arrow()
+        self.origin_arrow = _make_origin_arrow()
+
+
         # Queue from OpenGL thread to SDK thread
         self._input_intent_queue = collections.deque(maxlen=1)
 
-        self._last_robot_control_intents = RobotControlIntents()
-
-        self._is_keyboard_control_enabled = False
-
-        # self._image_handler = None
-        # self._nav_map_handler = None
-        self._robot_state_handler = None
-        self._exit_requested = False
-
-        global opengl_viewer
-        if opengl_viewer is not None:
-            logger.error("Multiple OpenGLViewer instances not expected: "
-                         "OpenGL / GLUT only supports running 1 blocking instance on the main thread.")
-        opengl_viewer = self
-
-        self.main_window = OpenGLWindow(0, 0, 800, 600,
-                                        b"Cozmo 3D Visualizer", is_3d=True)
-
-        self._camera_view_texture = None  # type: DynamicTexture
-        self.viewer_window = None  # type: OpenGLWindow
-        if enable_camera_view:
-            self.viewer_window = OpenGLWindow(self.main_window.width, 0, 640, 480,
-                                              b"Cozmo CameraFeed", is_3d=False)
-        #
-        # self.plotting_window = None
-        # if enable_plotting:
-        #     self.plotting_window = OpenGLWindow(self.main_window.width, self.main_window.height, 650, 480, b"Plotting", is_3d=False)
-
-
-        self.cozmo_object = None  # type: RenderableObject
-        self.cube_objects = []
+        # self._is_keyboard_control_enabled = False
 
         self._latest_world_frame = None  # type: WorldRenderFrame
-        self._latest_pose_history = None
+        #         self._latest_pose_history = None
         self._nav_memory_map_display_list = None
 
         # Keyboard
@@ -811,7 +917,7 @@ class OpenGLViewer():
         self._show_coordinates_relative_to_robot = False
 
         # Pose history
-        self._show_pose_history = False
+        self._show_pose_history = True
         self._show_intended_pose_history = False
         self._shade_pose_by_region = False
         self._shade_pose_by_learning_progress = False
@@ -819,39 +925,36 @@ class OpenGLViewer():
         self._region_colors = []
         self._learning_progress_colors = []
 
-        self._plt = None
-        self._fig = None
-
         #Cozmo
         self._show_cozmo = True
 
-        # Controls
-        self._show_controls = show_viewer_controls
-        self._instructions = '\n'.join(['W, S: Move forward, backward',
-                                        'A, D: Turn left, right',
-                                        'R, F: Lift up, down',
-                                        'T, G: Head up, down',
-                                        '',
-                                        'LMB: Rotate camera',
-                                        'RMB: Move camera',
-                                        'LMB + RMB: Move camera up/down',
-                                        'LMB + Z: Zoom camera',
-                                        'X: same as RMB',
-                                        'TAB: center view on robot',
-                                        '',
-                                        'H: Toggle help',
-                                        'C: Show coordinate visuals',
-                                        'P: Show pose history',
-                                        'O: Shade pose history (opacity)',
-                                        'B: Show Cozmo (bot)',
-                                        'Note: Smallest square is 10mm',
-                                        '''Note: Nav-Map child orientation is;     +---+----+---+
-                                        | ^ | 2  | 0 |
-                                        +---+----+---+
-                                        | Y | 3  | 1 |
-                                        +---+----+---+
-                                        |   | X->|   |
-                                        +---+----+---+'''])
+        #         # Controls
+        #         self._show_controls = show_viewer_controls
+        #         self._instructions = '\n'.join(['W, S: Move forward, backward',
+        #                                         'A, D: Turn left, right',
+        #                                         'R, F: Lift up, down',
+        #                                         'T, G: Head up, down',
+        #                                         '',
+        #                                         'LMB: Rotate camera',
+        #                                         'RMB: Move camera',
+        #                                         'LMB + RMB: Move camera up/down',
+        #                                         'LMB + Z: Zoom camera',
+        #                                         'X: same as RMB',
+        #                                         'TAB: center view on robot',
+        #                                         '',
+        #                                         'H: Toggle help',
+        #                                         'C: Show coordinate visuals',
+        #                                         'P: Show pose history',
+        #                                         'O: Shade pose history (opacity)',
+        #                                         'B: Show Cozmo (bot)',
+        #                                         'Note: Smallest square is 10mm',
+        #                                         '''Note: Nav-Map child orientation is;     +---+----+---+
+        #                                         | ^ | 2  | 0 |
+        #                                         +---+----+---+
+        #                                         | Y | 3  | 1 |
+        #                                         +---+----+---+
+        #                                         |   | X->|   |
+        #                                         +---+----+---+'''])
 
         # Camera position and orientation defined by a look-at positions
         # and a pitch/and yaw to rotate around that along with a distance
@@ -863,16 +966,345 @@ class OpenGLViewer():
         self._camera_up = util.Vector3(0.0, 0.0, 1.0)
         self._calculate_camera_pos()
 
-    # def close(self):
-    #     sys.exit()
 
-    def _request_exit(self):
-        self._exit_requested = True
-        # window = self.main_window.gl_window
-        # print(window)
-        # glutDestroyWindow(window)
-        if bool(glutLeaveMainLoop):
-            glutLeaveMainLoop()
+
+        # if self.plotting_window:
+        #     self.plotting_window.init_display()
+        #     glutDisplayFunc(self._display)
+
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update) # Triggers paintGL
+        self.timer.start(80) # ~60 FPS (1000ms / 60)
+
+        self.timer.timeout.connect(self.plot_window.update_plot)
+
+    def mousePressEvent(self, event):
+        current_pos = util.Vector2(event.position().x(), event.position().y())
+        if not self._mouse_pos is None:
+            # print(current_pos)
+            # print(self._mouse_pos)
+            delta = current_pos - self._mouse_pos
+            # print(f"Delta: {delta.x}, {delta.y}")
+
+        # Check if Control key is pressed
+        # if event.modifiers() & Qt.ControlModifier:
+        #     print(f"Ctrl+Mouse Move: Delta X={dx}, Delta Y={dy}")
+
+        # self.last_pos = current_pos
+        self._mouse_pos = util.Vector2(event.position().x(), event.position().y())
+
+
+    def mouseMoveEvent(self, event):
+        last_mouse_pos = self._mouse_pos
+        self._mouse_pos = util.Vector2(event.position().x(), event.position().y())
+        if last_mouse_pos is None:
+            # First mouse update - ignore (we need a delta of mouse positions)
+            return
+
+        MOUSE_SPEED_SCALAR = 1.0  # general scalar for all mouse movement sensitivity
+        MOUSE_ROTATE_SCALAR = 0.025  # additional scalar for rotation sensitivity
+        mouse_delta = (self._mouse_pos - last_mouse_pos) * MOUSE_SPEED_SCALAR
+
+
+        # Equivalent to GLUT_DOWN
+        if event.buttons() == Qt.MouseButton.LeftButton:
+            # print(f"Left button pressed at: {event.position().x()}, {event.position().y()}")
+            if self._is_key_pressed.get(b'z', False):
+                # Zoom in/out
+                self._camera_distance = max(0.1, self._camera_distance + mouse_delta.y)
+            else:
+                # print("adjusting pitch and yaw")
+                # Adjust the Camera pitch and yaw
+                self._camera_pitch = (self._camera_pitch - (mouse_delta.y * MOUSE_ROTATE_SCALAR))
+                self._camera_yaw = (self._camera_yaw + (mouse_delta.x * MOUSE_ROTATE_SCALAR)) % (2.0 * math.pi)
+                # Clamp pitch to slightyly less than pi/2 to avoid lock/errors at full up/down
+                max_rotation = math.pi * 0.49
+                self._camera_pitch = max(-max_rotation, min(max_rotation, self._camera_pitch))
+
+        elif event.buttons() == Qt.MouseButton.RightButton:
+            # print("Right button pressed")
+            # Move forward/back and left/right
+            pitch = self._camera_pitch
+            yaw = self._camera_yaw
+            camera_offset = util.Vector3(math.cos(yaw), math.sin(yaw), math.sin(pitch))
+
+            heading = math.atan2(camera_offset.y, camera_offset.x)
+
+            half_pi = math.pi * 0.5
+            self._camera_look_at._x += mouse_delta.x * math.cos(heading + half_pi)
+            self._camera_look_at._y += mouse_delta.x * math.sin(heading + half_pi)
+
+            self._camera_look_at._x += mouse_delta.y * math.cos(heading)
+            self._camera_look_at._y += mouse_delta.y * math.sin(heading)
+
+        elif event.buttons() == Qt.MouseButton.RightButton and event.buttons() == Qt.MouseButton.LeftButton:
+            # print("Both left and right buttons pressed")
+            # Move up/down
+            self._camera_look_at._z -= mouse_delta.y
+
+    # def mouseReleaseEvent(self, event):
+    #     # Equivalent to GLUT_UP
+    #     if event.button() == Qt.MouseButton.LeftButton:
+    #         print("Left button released")
+
+    def keyPressEvent(self, event):
+        # Equivalent to 'key' in glutKeyboardFunc
+        key = event.text()
+        # Equivalent to detecting modifiers
+        modifiers = event.modifiers()
+
+        # print(f"Key pressed: {key}")
+
+        if key == 'q':
+            QApplication.quit()
+
+        # # Handle special keys (like GLUT specialFunc)
+        # if event.key() == Qt.Key.Key_Escape:
+        #     print("Escape pressed")
+
+        # key = self._key_byte_to_lower(key)
+        # self._update_modifier_keys()
+        # self._is_key_pressed[key] = True
+
+        # if key == '9':  # Tab
+        #     # Set Look-At point to current robot position
+        #     world_frame = self._latest_world_frame
+        #     if world_frame is not None:
+        #         robot_pos = world_frame.robot_frame.pose.position
+        #         self._camera_look_at.set_to(robot_pos)
+        elif event.key() == Qt.Key.Key_Escape:  # Escape key
+            QApplication.quit()
+            # self.close()
+            # raise KeyboardInterrupt
+            # sys.exit()
+        elif key == 'h' or key == 'H': # h or H key
+            self._show_controls = not self._show_controls
+        elif key == 'c' or key == 'C': # c or C key
+            self._show_coordinates = not self._show_coordinates
+        elif key == 'p' or key == 'P': # p or P key
+            self._show_pose_history = not self._show_pose_history
+        elif key == 'i' or key == 'I': # i or I key
+            self._show_intended_pose_history = not self._show_intended_pose_history
+        elif key == 'o' or key == 'O': # o or O key
+            self._shade_pose_by_age = not self._shade_pose_by_age
+        elif key == 'q' or key == 'Q': # q or Q key
+            self._shade_pose_by_region = not self._shade_pose_by_region
+        elif key == 'v' or key == 'V':
+            self._shade_pose_by_learning_progress = not self._shade_pose_by_learning_progress
+        elif key == 'b' or key == 'B': # b or B key
+            self._show_cozmo = not self._show_cozmo
+
+
+
+    def paintGL(self):
+        # Clear the screen and the depth buffer
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+
+        # Set up the projection matrix
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        fov = 45.0
+        aspect_ratio = self.width() / self.height()
+        near_clip_plane = 1.0
+        far_clip_plane = 5000.0
+        gluPerspective(fov, aspect_ratio, near_clip_plane, far_clip_plane)
+
+        # Switch to model matrix for rendering everything
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+
+        # Add a light near the origin
+        light_ambient = [1.0, 1.0, 1.0, 1.0]
+        light_diffuse = [1.0, 1.0, 1.0, 1.0]
+        light_specular = [1.0, 1.0, 1.0, 1.0]
+        glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient)
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse)
+        glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular)
+        light_pos = [0, 20, 10, 1]
+        glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
+        glEnable(GL_LIGHT0)
+
+
+        self._calculate_camera_pos()
+
+        gluLookAt(*self._camera_pos.x_y_z,
+                  *self._camera_look_at.x_y_z,
+                  *self._camera_up.x_y_z)
+
+        # Update the latest world frame if there is a new one available
+        try:
+            world_frame = self._world_frame_queue.popleft()  # type: WorldRenderFrame
+            self._latest_world_frame = world_frame
+        except IndexError:
+            world_frame = self._latest_world_frame
+            pass
+
+        if world_frame is not None:
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+            glEnable(GL_LIGHTING)
+            glEnable(GL_NORMALIZE)  # to re-scale scaled normals
+
+            robot_frame = world_frame.robot_frame
+            robot_pose = robot_frame.pose
+
+            #             self._draw_text(GLUT_BITMAP_HELVETICA_12, f"(x:{round(robot_pose.position.x,3)}, y:{round(robot_pose.position.y,3)})[{round(robot_pose.rotation.angle_z.degrees, 2)}°]", 0, 6)
+            #             self._draw_text(GLUT_BITMAP_HELVETICA_12, self._progress_text, 0, 20)
+
+            # self._draw_text(GLUT_BITMAP_9_BY_15, f"(x:{round(robot_pose.position.x,3)}, y:{round(robot_pose.position.y,3)})[{round(robot_pose.rotation.angle_z.degrees, 2)}°]", 0, 6)
+            # self._draw_text(GLUT_BITMAP_9_BY_15, self._progress_text, 0, 20)
+
+            for obj in world_frame.custom_object_frames:
+                obj_pose = obj.pose
+                if obj_pose is not None and obj_pose.is_comparable(robot_pose):
+                    glPushMatrix()
+                    obj_matrix = obj_pose.to_matrix()
+                    glMultMatrixf(obj_matrix.in_row_order)
+
+                    glScalef(obj.x_size_mm * 0.5,
+                             obj.y_size_mm * 0.5,
+                             obj.z_size_mm * 0.5)
+
+                    # # Draw unit cube but scaled to the mm of the object
+                    # glScalef(obj.x_size_mm,
+                    #          obj.y_size_mm,
+                    #          obj.z_size_mm)
+                    # Only draw solid object for observable custom objects
+                    if obj.is_fixed:
+                        # fixed objects are drawn as transparent outlined boxes to make
+                        # it clearer that they have no effect on vision.
+                        FIXED_OBJECT_COLOR = [1.0, 0.7, 0.0, 1.0]
+                        self._draw_unit_cube(FIXED_OBJECT_COLOR, False)
+                    else:
+                        CUSTOM_OBJECT_COLOR = [1.0, 0.3, 0.3, 1.0]
+                        self._draw_unit_cube(CUSTOM_OBJECT_COLOR, True)
+
+                    # # Draw all objects as solid, including custom objects
+                    # CUSTOM_OBJECT_COLOR = [1.0, 0.3, 0.3, 1.0]
+                    # self._draw_unit_cube(CUSTOM_OBJECT_COLOR, True)
+
+                    glPopMatrix()
+
+
+            #                 # Update the latest world frame if there is a new one available
+
+            try:
+                pose_history = self._pose_history_queue.popleft()  # type: WorldRenderFrame
+                self._latest_pose_history = pose_history
+            except IndexError:
+                pose_history = self._latest_pose_history
+                pass
+            if self._show_pose_history:
+                if pose_history is not None:
+                    for idx,past_pose in enumerate(pose_history[0]):
+                        if past_pose is not None and past_pose.is_comparable(robot_pose):
+                            glPushMatrix()
+                            glDisable(GL_LIGHTING)  # so it shows as red from all angles
+
+                            pose_matrix = past_pose.to_matrix()
+                            glMultMatrixf(pose_matrix.in_row_order) # this appears to make it so my pose arrow is drawn with 0,0 being the pose specified
+
+                            if self._shade_pose_by_age:
+                                CUBE_OBJECT_COLOR = [1.0, 0.0, 0.0, idx/len(pose_history[0])] # red
+                            elif self._shade_pose_by_region:
+                                CUBE_OBJECT_COLOR = self._region_colors[idx] # whatever color for the region
+                            elif self._shade_pose_by_learning_progress:
+                                CUBE_OBJECT_COLOR = self._learning_progress_colors[idx]
+                            else:
+                                CUBE_OBJECT_COLOR = [1.0, 0.0, 0.0, 1.0] # red
+
+                            self._draw_pose_arrow(CUBE_OBJECT_COLOR, draw_solid=True)
+                            # if self._show_coordinates:
+                            #     # self._draw_unit_cube([0.5, 0.5, 0.5, 1.0], True)
+                            #     self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+                            #     self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, f"({round(pose_history[1][idx].position.x,2)}, {round(pose_history[1][idx].position.y,2)})[{round(pose_history[1][idx].rotation.angle_z.degrees, 2)}°]", 0, 0, 2)
+
+                            glPopMatrix()
+
+            #             try:
+            #                 intended_pose_history = self._intended_pose_history_queue.popleft()  # type: WorldRenderFrame
+            #                 self._latest_intended_pose_history = intended_pose_history
+            #             except IndexError:
+            #                 intended_pose_history = self._latest_intended_pose_history
+            #                 pass
+
+            #             if self._show_intended_pose_history:
+            #                 if intended_pose_history is not None:
+            #                     for idx,past_pose in enumerate(intended_pose_history[0]):
+            #                         if past_pose is not None and past_pose.is_comparable(robot_pose):
+            #                             glPushMatrix()
+            #                             glDisable(GL_LIGHTING)  # so it shows as red from all angles
+
+            #                             pose_matrix = past_pose.to_matrix()
+            #                             glMultMatrixf(pose_matrix.in_row_order) # this appears to make it so my pose arrow is drawn with 0,0 being the pose specified
+
+            #                             if self._shade_pose_by_age:
+            #                                 CUBE_OBJECT_COLOR = [0.0, 1.0, 0.0, idx/len(pose_history[0])] # red
+            #                             elif self._shade_pose_by_region:
+            #                                 CUBE_OBJECT_COLOR = self._region_colors[idx] # whatever color for the region
+            #                             elif self._shade_pose_by_learning_progress:
+            #                                 CUBE_OBJECT_COLOR = self._learning_progress_colors[idx]
+            #                             else:
+            #                                 CUBE_OBJECT_COLOR = [0.0, 1.0, 0.0, 1.0] # red
+
+            #                             # glRotate(past_pose.rotation.angle_z.degrees, 0, 0)
+            #                             self._draw_pose_arrow(CUBE_OBJECT_COLOR, draw_solid=True)
+
+            #                             glPopMatrix()
+
+
+
+            glDisable(GL_LIGHTING)
+            if self._show_cozmo:
+                self._draw_cozmo(robot_frame)
+
+                # self._draw_pose_history()
+
+
+        #         if self._show_controls:
+        #             self._draw_controls()
+
+        # Draw the (translucent) nav map last so it's sorted correctly against opaque geometry
+        self._draw_memory_map()
+
+        # self._draw_origin_circle(color=[1.0, 0.0, 0.0, 1.0])
+        # self._draw_unit_cube(color=[1.0, 0.0, 0.0, 1.0], draw_solid=True)
+        # self._draw_origin_arrow(color=[0.16, 0.35, 1.0, 1.0])
+        self._draw_origin_arrow(color=[1.0, 1.0, 1.0, 1])
+
+        #         if self._show_coordinates:
+        #             self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+        #             self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,0)', 0, 0)
+
+        #             glPushMatrix() # w/ popmatrix to to save and restore the unscaled coordinate system.
+        #             glTranslatef(10,0,0)
+        #             self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+        #             # glTranslatef(0,0,0)
+        #             glPopMatrix()
+        #             # glFlush()
+        #             self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(10,0)', 10, 0)
+        #             #
+        #             glPushMatrix()
+        #             glTranslatef(-10,0,0)
+        #             self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+        #             glPopMatrix()
+        #             self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(-10,0)', -10, 0)
+
+        #             # glPushMatrix()
+        #             # glTranslatef(0,10,0)
+        #             # self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+        #             # glPopMatrix()
+        #             # self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,10)', 0, 10)
+        #             #
+        #             # glPushMatrix()
+        #             # glTranslatef(0,-10,0)
+        #             # self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+        #             # glPopMatrix()
+        #             # self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,-10)', 0, -10)
+
+
+        glutSwapBuffers()
+
 
     def _calculate_camera_pos(self):
         # Calculate camera position based on look-at, distance and angles
@@ -887,62 +1319,25 @@ class OpenGLViewer():
         self._camera_pos._y = cam_look_at.y + (cam_distance * cos_pitch * sin_yaw)
         self._camera_pos._z = cam_look_at.z + (cam_distance * sin_pitch)
 
-    def _update_modifier_keys(self):
-        modifiers = glutGetModifiers()
-        self._is_alt_down = (modifiers & GLUT_ACTIVE_ALT != 0)
-        self._is_ctrl_down = (modifiers & GLUT_ACTIVE_CTRL != 0)
-        self._is_shift_down = (modifiers & GLUT_ACTIVE_SHIFT != 0)
+    def _draw_unit_cube(self, color, draw_solid):
+        glColor(color)
 
-    def _update_intents_for_robot(self):
-        # Update driving intents based on current input, and pass to SDK thread
-        # so that it can pass the input on to the robot.
-        def get_intent_direction(key1, key2):
-            # Helper for keyboard inputs that have 1 positive and 1 negative input
-            pos_key = self._is_key_pressed.get(key1, False)
-            neg_key = self._is_key_pressed.get(key2, False)
-            return pos_key - neg_key
-
-        drive_dir = get_intent_direction(b'w', b's')
-        turn_dir = get_intent_direction(b'd', b'a')
-        lift_dir = get_intent_direction(b'r', b'f')
-        head_dir = get_intent_direction(b't', b'g')
-
-        if drive_dir < 0:
-            # It feels more natural to turn the opposite way when reversing
-            turn_dir = -turn_dir
-
-        # Scale drive speeds with SHIFT (faster) and ALT (slower)
-        if self._is_shift_down:
-            speed_scalar = 2.0
-        elif self._is_alt_down:
-            speed_scalar = 0.5
+        if draw_solid:
+            ambient_color = [color[0]*0.1, color[1]*0.1, color[2]*0.1, 1.0]
         else:
-            speed_scalar = 1.0
+            ambient_color = color
+        glMaterialfv(GL_FRONT, GL_AMBIENT, ambient_color)
+        glMaterialfv(GL_FRONT, GL_DIFFUSE, color)
+        glMaterialfv(GL_FRONT, GL_SPECULAR,  color)
 
-        drive_speed = 75.0 * speed_scalar
-        turn_speed = 100.0 * speed_scalar
+        glMaterialfv(GL_FRONT, GL_SHININESS, 10.0);
 
-        left_wheel_speed = (drive_dir * drive_speed) + (turn_speed * turn_dir)
-        right_wheel_speed = (drive_dir * drive_speed) - (turn_speed * turn_dir)
-        lift_speed = 4.0 * lift_dir * speed_scalar
-        head_speed = head_dir * speed_scalar
-
-        control_intents = RobotControlIntents(left_wheel_speed, right_wheel_speed,
-                                              lift_speed, head_speed)
-        self._input_intent_queue.append(control_intents)
-
-    def _idle(self):
-        if self._is_keyboard_control_enabled:
-            self._update_intents_for_robot()
-        glutPostRedisplay()
-
-    def _visible(self, vis):
-        # Called from OpenGL when visibility changes (windows are either visible
-        # or completely invisible/hidden)
-        if vis == GLUT_VISIBLE:
-            glutIdleFunc(self._idle)
+        if draw_solid:
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
         else:
-            glutIdleFunc(None)
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+
+        glCallList(self.unit_cube)
 
     def _draw_memory_map(self):
         # Update the renderable map if new data is available, and
@@ -1052,31 +1447,11 @@ class OpenGLViewer():
             glCallList(self._nav_memory_map_display_list)
             glPopMatrix()
 
-
-    #
-    # def draw_pose_history(self):
-    #     new_pose_history = None
-    #     try:
-    #         new_pose_history = self._pose_history_queue.popleft()
-    #     except IndexError:
-    #         # no new nav pose history - queue is empty
-    #         pass
-    #
-    #     if new_pose_history is not None:
-    #         self._pose_history_display_list = glGenLists(1)
-    #         glNewList(self._pose_history_display_list, GL_COMPILE)
-    #         for i in range(10):
-    #             glBegin(GL_POINTS)
-    #             glVertex2f(i, i)
-    #             glEnd()
-    #             glFlush()
-
-
     def _draw_cozmo(self, robot_frame):
         if self.cozmo_object is None:
             return
-
         robot_pose = robot_frame.pose
+        # print(f"Robot pose: {robot_pose}")
         robot_head_angle = robot.MIN_HEAD_ANGLE #robot_frame.head_angle
         robot_lift_position = LiftPosition(height=util.distance_mm(robot.MIN_LIFT_HEIGHT_MM)) #robot_frame.lift_position
 
@@ -1273,675 +1648,3 @@ class OpenGLViewer():
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
 
         glCallList(self.unit_cube)
-
-
-    def _display_3d_view(self, window):
-        glutSetWindow(window.gl_window)
-
-        # Clear the screen and the depth buffer
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-
-        # Set up the projection matrix
-        glMatrixMode(GL_PROJECTION)
-        glLoadIdentity()
-        fov = 45.0
-        aspect_ratio = window.width / window.height
-        near_clip_plane = 1.0
-        far_clip_plane = 5000.0
-        gluPerspective(fov, aspect_ratio, near_clip_plane, far_clip_plane)
-
-        # Switch to model matrix for rendering everything
-        glMatrixMode(GL_MODELVIEW)
-        glLoadIdentity()
-
-        # Add a light near the origin
-        light_ambient = [1.0, 1.0, 1.0, 1.0]
-        light_diffuse = [1.0, 1.0, 1.0, 1.0]
-        light_specular = [1.0, 1.0, 1.0, 1.0]
-        glLightfv(GL_LIGHT0, GL_AMBIENT, light_ambient)
-        glLightfv(GL_LIGHT0, GL_DIFFUSE, light_diffuse)
-        glLightfv(GL_LIGHT0, GL_SPECULAR, light_specular)
-        light_pos = [0, 20, 10, 1]
-        glLightfv(GL_LIGHT0, GL_POSITION, light_pos)
-        glEnable(GL_LIGHT0)
-
-        # scale from mm to cm
-        # glScalef(0.1, 0.1, 0.1)  # 1 mm is 0.1 cm
-
-        # Orient the camera
-        self._calculate_camera_pos()
-
-        gluLookAt(*self._camera_pos.x_y_z,
-                  *self._camera_look_at.x_y_z,
-                  *self._camera_up.x_y_z)
-
-        # Update the latest world frame if there is a new one available
-        try:
-            world_frame = self._world_frame_queue.popleft()  # type: WorldRenderFrame
-            self._latest_world_frame = world_frame
-        except IndexError:
-            world_frame = self._latest_world_frame
-            pass
-
-        if world_frame is not None:
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-            glEnable(GL_LIGHTING)
-            glEnable(GL_NORMALIZE)  # to re-scale scaled normals
-
-            robot_frame = world_frame.robot_frame
-            robot_pose = robot_frame.pose
-            self._draw_text(GLUT_BITMAP_9_BY_15, f"(x:{round(robot_pose.position.x,3)}, y:{round(robot_pose.position.y,3)})[{round(robot_pose.rotation.angle_z.degrees, 2)}°]", 0, 6)
-            self._draw_text(GLUT_BITMAP_9_BY_15, self._progress_text, 0, 20)
-            # # Render the cubes
-            # for i in range(3):
-            #     cube_obj = self.cube_objects[i]
-            #     cube_frame = world_frame.cube_frames[i]
-            #     if cube_frame is None:
-            #         continue
-            #
-            #     cube_pose = cube_frame.pose
-            #     if cube_pose is not None and cube_pose.is_comparable(robot_pose):
-            #         glPushMatrix()
-            #
-            #         # TODO if cube_pose.is_accurate is False, render half-translucent?
-            #         #  (This would require using a shader, or having duplicate objects)
-            #
-            #         cube_matrix = cube_pose.to_matrix()
-            #         glMultMatrixf(cube_matrix.in_row_order)
-            #
-            #         # Cube is drawn slightly larger than the 10mm to 1 cm scale, as the model looks small otherwise
-            #         # cube_scale_amt = 10.7
-            #         # Catherine TODO: I removed "slightly" larger scaling
-            #         cube_scale_amt = 10
-            #         # Scale the obj mesh dimensions from cm to mm (we are treating 1 mm as the base unit for this world rendering)
-            #         glScalef(cube_scale_amt, cube_scale_amt, cube_scale_amt)
-            #
-            #         cube_obj.draw_all()
-            #         glPopMatrix()
-            #
-            # glBindTexture(GL_TEXTURE_2D, 0)
-            #
-            # for face in world_frame.face_frames:
-            #     face_pose = face.pose
-            #     if face_pose is not None and face_pose.is_comparable(robot_pose):
-            #         glPushMatrix()
-            #         face_matrix = face_pose.to_matrix()
-            #         glMultMatrixf(face_matrix.in_row_order)
-            #
-            #         # Approximate size of a head in mm
-            #         # Because we are drawing a unit cube, the these are essentially 100*1mm, 25*1mm, and 100*1mm
-            #         glScalef(100, 25, 100)
-            #
-            #         FACE_OBJECT_COLOR = [0.5, 0.5, 0.5, 1.0]
-            #         draw_solid = face.time_since_last_seen < 30
-            #         self._draw_unit_cube(FACE_OBJECT_COLOR, draw_solid)
-            #
-            #         glPopMatrix()
-            #
-            # #TODO: catherine bring this back
-            for obj in world_frame.custom_object_frames:
-                obj_pose = obj.pose
-                if obj_pose is not None and obj_pose.is_comparable(robot_pose):
-                    glPushMatrix()
-                    obj_matrix = obj_pose.to_matrix()
-                    glMultMatrixf(obj_matrix.in_row_order)
-
-                    glScalef(obj.x_size_mm * 0.5,
-                             obj.y_size_mm * 0.5,
-                             obj.z_size_mm * 0.5)
-
-                    # # Draw unit cube but scaled to the mm of the object
-                    # glScalef(obj.x_size_mm,
-                    #          obj.y_size_mm,
-                    #          obj.z_size_mm)
-                    # Only draw solid object for observable custom objects
-                    if obj.is_fixed:
-                        # fixed objects are drawn as transparent outlined boxes to make
-                        # it clearer that they have no effect on vision.
-                        FIXED_OBJECT_COLOR = [1.0, 0.7, 0.0, 1.0]
-                        self._draw_unit_cube(FIXED_OBJECT_COLOR, False)
-                    else:
-                        CUSTOM_OBJECT_COLOR = [1.0, 0.3, 0.3, 1.0]
-                        self._draw_unit_cube(CUSTOM_OBJECT_COLOR, True)
-
-                    # # Draw all objects as solid, including custom objects
-                    # CUSTOM_OBJECT_COLOR = [1.0, 0.3, 0.3, 1.0]
-                    # self._draw_unit_cube(CUSTOM_OBJECT_COLOR, True)
-
-                    glPopMatrix()
-
-
-                # Update the latest world frame if there is a new one available
-
-            try:
-                pose_history = self._pose_history_queue.popleft()  # type: WorldRenderFrame
-                self._latest_pose_history = pose_history
-            except IndexError:
-                pose_history = self._latest_pose_history
-                pass
-            if self._show_pose_history:
-                if pose_history is not None:
-                    for idx,past_pose in enumerate(pose_history[0]):
-                        if past_pose is not None and past_pose.is_comparable(robot_pose):
-                            glPushMatrix()
-                            glDisable(GL_LIGHTING)  # so it shows as red from all angles
-
-                            pose_matrix = past_pose.to_matrix()
-                            glMultMatrixf(pose_matrix.in_row_order) # this appears to make it so my pose arrow is drawn with 0,0 being the pose specified
-
-                            if self._shade_pose_by_age:
-                                CUBE_OBJECT_COLOR = [1.0, 0.0, 0.0, idx/len(pose_history[0])] # red
-                            elif self._shade_pose_by_region:
-                                CUBE_OBJECT_COLOR = self._region_colors[idx] # whatever color for the region
-                            elif self._shade_pose_by_learning_progress:
-                                CUBE_OBJECT_COLOR = self._learning_progress_colors[idx]
-                            else:
-                                CUBE_OBJECT_COLOR = [1.0, 0.0, 0.0, 1.0] # red
-
-                            # glRotate(past_pose.rotation.angle_z.degrees, 0, 0)
-                            self._draw_pose_arrow(CUBE_OBJECT_COLOR, draw_solid=True)
-                            if self._show_coordinates:
-                                # self._draw_unit_cube([0.5, 0.5, 0.5, 1.0], True)
-                                self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-                                self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, f"({round(pose_history[1][idx].position.x,2)}, {round(pose_history[1][idx].position.y,2)})[{round(pose_history[1][idx].rotation.angle_z.degrees, 2)}°]", 0, 0, 2)
-
-                            glPopMatrix()
-
-            try:
-                intended_pose_history = self._intended_pose_history_queue.popleft()  # type: WorldRenderFrame
-                self._latest_intended_pose_history = intended_pose_history
-            except IndexError:
-                intended_pose_history = self._latest_intended_pose_history
-                pass
-
-            if self._show_intended_pose_history:
-                if intended_pose_history is not None:
-                    for idx,past_pose in enumerate(intended_pose_history[0]):
-                        if past_pose is not None and past_pose.is_comparable(robot_pose):
-                            glPushMatrix()
-                            glDisable(GL_LIGHTING)  # so it shows as red from all angles
-
-                            pose_matrix = past_pose.to_matrix()
-                            glMultMatrixf(pose_matrix.in_row_order) # this appears to make it so my pose arrow is drawn with 0,0 being the pose specified
-
-                            if self._shade_pose_by_age:
-                                CUBE_OBJECT_COLOR = [0.0, 1.0, 0.0, idx/len(pose_history[0])] # red
-                            elif self._shade_pose_by_region:
-                                CUBE_OBJECT_COLOR = self._region_colors[idx] # whatever color for the region
-                            elif self._shade_pose_by_learning_progress:
-                                CUBE_OBJECT_COLOR = self._learning_progress_colors[idx]
-                            else:
-                                CUBE_OBJECT_COLOR = [0.0, 1.0, 0.0, 1.0] # red
-
-                            # glRotate(past_pose.rotation.angle_z.degrees, 0, 0)
-                            self._draw_pose_arrow(CUBE_OBJECT_COLOR, draw_solid=True)
-
-                            glPopMatrix()
-
-
-
-            glDisable(GL_LIGHTING)
-            if self._show_cozmo:
-                self._draw_cozmo(robot_frame)
-
-                # self._draw_pose_history()
-
-
-        if self._show_controls:
-            self._draw_controls()
-
-        # Draw the (translucent) nav map last so it's sorted correctly against opaque geometry
-        self._draw_memory_map()
-
-        # self._draw_origin_circle(color=[1.0, 0.0, 0.0, 1.0])
-        # self._draw_unit_cube(color=[1.0, 0.0, 0.0, 1.0], draw_solid=True)
-        # self._draw_origin_arrow(color=[0.16, 0.35, 1.0, 1.0])
-        self._draw_origin_arrow(color=[1.0, 1.0, 1.0, 1])
-
-        if self._show_coordinates:
-            self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-            self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,0)', 0, 0)
-
-            glPushMatrix() # w/ popmatrix to to save and restore the unscaled coordinate system.
-            glTranslatef(10,0,0)
-            self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-            # glTranslatef(0,0,0)
-            glPopMatrix()
-            # glFlush()
-            self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(10,0)', 10, 0)
-            #
-            glPushMatrix()
-            glTranslatef(-10,0,0)
-            self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-            glPopMatrix()
-            self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(-10,0)', -10, 0)
-
-            # glPushMatrix()
-            # glTranslatef(0,10,0)
-            # self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-            # glPopMatrix()
-            # self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,10)', 0, 10)
-            #
-            # glPushMatrix()
-            # glTranslatef(0,-10,0)
-            # self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-            # glPopMatrix()
-            # self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,-10)', 0, -10)
-
-
-        glutSwapBuffers()
-
-    def _draw_text_on_grid(self, font, input, x, y, z=2,  r=1.0, g=1.0, b=1.0):
-        '''Render text based on window position. The origin is in the bottom-left.'''
-        glColor3f(r, g, b)
-        glRasterPos3f(x,y, z)
-        input_list = input.split('\n')
-        # y = y + (line_height * (len(input_list) -1))
-        for line in input_list:
-            glRasterPos3f(x, y, z)
-            # y -= line_height
-            for ch in line:
-                glutBitmapCharacter(font, ctypes.c_int(ord(ch)))
-
-    def _draw_controls(self):
-        try:
-            GLUT_BITMAP_9_BY_15
-        except NameError:
-            pass
-        else:
-            self._draw_text(GLUT_BITMAP_9_BY_15, self._instructions, 10, 20)
-
-    def _draw_text(self, font, input, x, y, line_height=16, r=1.0, g=1.0, b=1.0):
-        '''Render text based on window position. The origin is in the bottom-left.'''
-        glColor3f(r, g, b)
-        glWindowPos2f(x,y)
-        input_list = input.split('\n')
-        y = y + (line_height * (len(input_list) -1))
-        for line in input_list:
-            glWindowPos2f(x, y)
-            y -= line_height
-            for ch in line:
-                glutBitmapCharacter(font, ctypes.c_int(ord(ch)))
-
-    def _display_camera_view(self, window):
-        glutSetWindow(window.gl_window)
-
-        if self._camera_view_texture is None:
-            self._camera_view_texture = DynamicTexture()
-
-        target_width = window.width
-        target_height = window.height
-        target_aspect = 320 / 240  # (Camera-feed resolution and aspect ratio)
-        max_u = 1.0
-        max_v = 1.0
-        if (target_width / target_height) < target_aspect:
-            target_height = target_width / target_aspect
-            max_v *= target_height / window.height
-        elif (target_width / target_height) > target_aspect:
-            target_width = target_height * target_aspect
-            max_u *= target_width / window.width
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glEnable(GL_TEXTURE_2D)
-
-        # Try getting a new image if one has been added
-        image = None
-        try:
-            image = self._img_queue.popleft()
-        except IndexError:
-            # no new image - queue is empty
-            pass
-
-        if image:
-            # There's a new image - update the texture
-            self._camera_view_texture.update(image)
-        else:
-            # keep using the most recent texture
-            self._camera_view_texture.bind()
-
-        # Display the image as a tri-strip with 4 vertices
-        glBegin(GL_TRIANGLE_STRIP)
-        # (0,0) = Top Left, (1,1) = Bottom Right
-        # left, bottom
-        glTexCoord2f(0.0, 1.0)
-        glVertex2f(-max_u, -max_v)
-        # right, bottom
-        glTexCoord2f(1.0, 1.0)
-        glVertex2f(max_u, -max_v)
-        # left, top
-        glTexCoord2f(0.0, 0.0)
-        glVertex2f(-max_u, max_v)
-        # right, top
-        glTexCoord2f(1.0, 0.0)
-        glVertex2f(max_u, max_v)
-        glEnd()
-
-        glDisable(GL_TEXTURE_2D)
-
-        glutSwapBuffers()
-
-    def _display(self):
-        try:
-            self._display_3d_view(self.main_window)
-
-            if self.viewer_window:
-                self._display_camera_view(self.viewer_window)
-
-        except KeyboardInterrupt:
-            logger.info("_display caught KeyboardInterrupt - exitting")
-            self._request_exit()
-
-    def _key_byte_to_lower(self, key):
-        # Convert bytes-object (representing keyboard character) to lowercase equivalent
-        if (key >= b'A') and (key <= b'Z'):
-            lowercase_key = ord(key) - ord(b'A') + ord(b'a')
-            lowercase_key = bytes([lowercase_key])
-            return lowercase_key
-        return key
-
-    def _on_key_up(self, key, x, y):
-        key = self._key_byte_to_lower(key)
-        self._update_modifier_keys()
-        self._is_key_pressed[key] = False
-
-    def _on_key_down(self, key, x, y):
-        key = self._key_byte_to_lower(key)
-        self._update_modifier_keys()
-        self._is_key_pressed[key] = True
-
-        if ord(key) == 9:  # Tab
-            # Set Look-At point to current robot position
-            world_frame = self._latest_world_frame
-            if world_frame is not None:
-                robot_pos = world_frame.robot_frame.pose.position
-                self._camera_look_at.set_to(robot_pos)
-        elif ord(key) == 27:  # Escape key
-            self._request_exit()
-        elif ord(key) == 72 or ord(key) == 104: # h or H key
-            self._show_controls = not self._show_controls
-        elif ord(key) == 67 or ord(key) == 99: # c or C key
-            self._show_coordinates = not self._show_coordinates
-        elif ord(key) == 80 or ord(key) == 112: # p or P key
-            self._show_pose_history = not self._show_pose_history
-        elif ord(key) == 73 or ord(key) == 105: # i or I key
-            self._show_intended_pose_history = not self._show_intended_pose_history
-        elif ord(key) == 79 or ord(key) == 111: # o or O key
-            self._shade_pose_by_age = not self._shade_pose_by_age
-        elif ord(key) == 81 or ord(key) == 113: # q or Q key
-            self._shade_pose_by_region = not self._shade_pose_by_region
-        elif ord(key) == 86 or ord(key) == 118:
-            self._shade_pose_by_learning_progress = not self._shade_pose_by_learning_progress
-        elif ord(key) == 66 or ord(key) == 98: # b or B key
-            self._show_cozmo = not self._show_cozmo
-
-
-    def _on_special_key_up(self, key, x, y):
-        self._update_modifier_keys()
-
-    def _on_special_key_down(self, key, x, y):
-        self._update_modifier_keys()
-
-    def _on_mouse_button(self, button, state, x, y):
-        # Don't update modifier keys- reading modifier keys is unreliable
-        # from _on_mouse_button (for LMB down/up), only SHIFT key seems to read there
-        #self._update_modifier_keys()
-        is_down = (state == GLUT_DOWN)
-        self._is_mouse_down[button] = is_down
-        self._mouse_pos = util.Vector2(x, y)
-
-    def _on_mouse_move_internal(self, x, y, is_active):
-        # is_active is True if this is not passive (i.e. a mouse button was down)
-        last_mouse_pos = self._mouse_pos
-        self._mouse_pos = util.Vector2(x, y)
-        if last_mouse_pos is None:
-            # First mouse update - ignore (we need a delta of mouse positions)
-            return
-
-        left_button = self._is_mouse_down.get(GLUT_LEFT_BUTTON, False)
-        # For laptop and other 1-button mouse users, treat 'x' key as a right mouse button too
-        right_button = (self._is_mouse_down.get(GLUT_RIGHT_BUTTON, False) or
-                        self._is_key_pressed.get(b'x', False))
-
-        MOUSE_SPEED_SCALAR = 1.0  # general scalar for all mouse movement sensitivity
-        MOUSE_ROTATE_SCALAR = 0.025  # additional scalar for rotation sensitivity
-        mouse_delta = (self._mouse_pos - last_mouse_pos) * MOUSE_SPEED_SCALAR
-
-        if left_button and right_button:
-            # Move up/down
-            self._camera_look_at._z -= mouse_delta.y
-        elif right_button:
-            # Move forward/back and left/right
-            pitch = self._camera_pitch
-            yaw = self._camera_yaw
-            camera_offset = util.Vector3(math.cos(yaw), math.sin(yaw), math.sin(pitch))
-
-            heading = math.atan2(camera_offset.y, camera_offset.x)
-
-            half_pi = math.pi * 0.5
-            self._camera_look_at._x += mouse_delta.x * math.cos(heading + half_pi)
-            self._camera_look_at._y += mouse_delta.x * math.sin(heading + half_pi)
-
-            self._camera_look_at._x += mouse_delta.y * math.cos(heading)
-            self._camera_look_at._y += mouse_delta.y * math.sin(heading)
-        elif left_button:
-            if self._is_key_pressed.get(b'z', False):
-                # Zoom in/out
-                self._camera_distance = max(0.1, self._camera_distance + mouse_delta.y)
-            else:
-                # Adjust the Camera pitch and yaw
-                self._camera_pitch = (self._camera_pitch - (mouse_delta.y * MOUSE_ROTATE_SCALAR))
-                self._camera_yaw = (self._camera_yaw + (mouse_delta.x * MOUSE_ROTATE_SCALAR)) % (2.0 * math.pi)
-                # Clamp pitch to slightyly less than pi/2 to avoid lock/errors at full up/down
-                max_rotation = math.pi * 0.49
-                self._camera_pitch = max(-max_rotation, min(max_rotation, self._camera_pitch))
-
-    def _on_mouse_move(self, x, y):
-        # Mouse movement when at least one button down
-        self._on_mouse_move_internal(x, y, True)
-
-    def _on_mouse_move_passive(self, x, y):
-        # Mouse movement when no button down
-        self._on_mouse_move_internal(x, y, False)
-
-    def init_display(self):
-        # glutInitContextVersion (3, 2)
-        # glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
-
-        # glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
-
-        # glutInitDisplayMode(GLUT_3_2_CORE_PROFILE | GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
-
-        self.main_window.init_display()
-
-        glutDisplayFunc(self._display)  # Note: both windows call the same DisplayFunc
-        glutKeyboardFunc(self._on_key_down)
-        glutSpecialFunc(self._on_special_key_down)
-
-
-    # [Keyboard/Special]Up methods aren't supported on some old GLUT implementations
-        has_keyboard_up = False
-        has_special_up = False
-        try:
-            if bool(glutKeyboardUpFunc):
-                glutKeyboardUpFunc(self._on_key_up)
-                has_keyboard_up = True
-            if bool(glutSpecialUpFunc):
-                glutSpecialUpFunc(self._on_special_key_up)
-                has_special_up = True
-        except OpenGL.error.NullFunctionError:
-            # Methods aren't available on this GLUT version
-            pass
-
-        if not has_keyboard_up or not has_special_up:
-            # Warn on old GLUT implementations that don't implement much of the interface.
-            logger.warning("Warning: Old GLUT implementation detected - keyboard remote control of Cozmo disabled."
-                           "We recommend installing freeglut. %s", _glut_install_instructions())
-            self._is_keyboard_control_enabled = False
-        else:
-            self._is_keyboard_control_enabled = True
-
-        try:
-            GLUT_BITMAP_9_BY_15
-        except NameError:
-            logger.warning("Warning: GLUT font not detected. Help message will be unavailable.")
-
-        glutMouseFunc(self._on_mouse_button)
-        glutMotionFunc(self._on_mouse_move)
-        glutPassiveMotionFunc(self._on_mouse_move_passive)
-
-        glutIdleFunc(self._idle)
-        glutVisibilityFunc(self._visible)
-
-        # Load 3D objects
-
-        _cozmo_obj = LoadedObjFile("cozmo.obj")
-        self.cozmo_object = RenderableObject(_cozmo_obj)
-
-        # Load the cubes, reusing the same file geometry for all 3.
-        _cube_obj = LoadedObjFile("cube.obj")
-        self.cube_objects.append(RenderableObject(_cube_obj))
-        self.cube_objects.append(RenderableObject(_cube_obj, override_mtl=LoadMtlFile("cube2.mtl")))
-        self.cube_objects.append(RenderableObject(_cube_obj, override_mtl=LoadMtlFile("cube3.mtl")))
-
-        self.unit_cube = _make_unit_cube()
-        self.pose_cube = _make_pose_cube()
-        self.pose_arrow = _make_pose_arrow()
-        self.origin_arrow = _make_origin_arrow()
-
-        if self.viewer_window:
-            self.viewer_window.init_display()
-            glutDisplayFunc(self._display)  # Note: both windows call the same DisplayFunc
-
-        # if self.plotting_window:
-        #     self.plotting_window.init_display()
-        #     glutDisplayFunc(self._display)
-
-
-    def mainloop(self):
-        if self.main_window.gl_window is None:
-            self.init_display()
-            print("New display")
-        else:
-            print("gl window exists already")
-        # self._plt.show(block=False)
-        # self._plt.pause(1)
-        # use a non-blocking update loop if possible to make exit conditions
-        # easier (not supported on all GLUT versions).
-        if bool(glutCheckLoop):
-            while not self._exit_requested:
-                glutCheckLoop()
-        else:
-            # This blocks until quit
-            glutMainLoop()
-
-        if self._exit_requested:
-            # Pass the keyboard interrupt on to SDK so that it can close cleanly
-            raise KeyboardInterrupt
-
-    # async def connect(self, open_gl_data):
-    #     pass
-    #     # sdk_robot = await sdk_conn.wait_for_robot()
-    #
-    #     # Note: OpenGL and SDK are on different threads, so we deliberately don't
-    #     # store a reference to the robot here, as we should only access it from
-    #     # events called on the SDK thread (where we can then thread-safely move
-    #     # the data into OpenGL)
-    #     #
-    #     # self._robot_state_handler = sdk_robot.world.add_event_handler(
-    #     #     robot.EvtRobotStateUpdated, self.on_robot_state_update)
-    #     #
-    #     # if self.viewer_window is not None:
-    #     #     # Automatically enable camera stream when viewer window is used.
-    #     #     sdk_robot.camera.image_stream_enabled = True
-    #     #     self._image_handler = sdk_robot.world.add_event_handler(
-    #     #         world.EvtNewCameraImage, self.on_new_camera_image)
-    #     # Automatically enable streaming of the nav memory map when using the
-    #     # viewer (can be overridden by user application after connection).
-    #     # sdk_robot.world.request_nav_memory_map(0.5)
-    #
-    #     # self._nav_map_handler = robot.world.add_event_handler(
-    #     #     nav_memory_map.EvtNewNavMemoryMap, self.on_new_nav_memory_map)
-    #
-    #     # self._pose_history_handler = sdk_robot.world.add_event_handler(robot.EvtPoseHistory, self.on_new_pose_history)
-    #
-    #
-    # def disconnect(self):
-    #     """Called from the SDK when the program is complete and it's time to exit."""
-    #     # if self._image_handler:
-    #     #     self._image_handler.disable()
-    #     #     self._image_handler = None
-    #     # if self._nav_map_handler:
-    #     #     self._nav_map_handler.disable()
-    #     #     self._nav_map_handler = None
-    #     # if self._robot_state_handler:
-    #     #     self._robot_state_handler.disable()
-    #     #     self._robot_state_handler = None
-    #     if not self._exit_requested:
-    #         self._request_exit()
-    #
-    # def _update_robot_remote_control(self, robot):
-    #     # Called on SDK thread, for controlling robot from input intents
-    #     # pushed from the OpenGL thread.
-    #     try:
-    #         input_intents = self._input_intent_queue.popleft()  # type: RobotControlIntents
-    #     except IndexError:
-    #         # no new input intents - do nothing
-    #         return
-    #
-    #     # Track last-used intents so that we only issue motor controls
-    #     # if different from the last frame (to minimize it fighting with an SDK
-    #     # program controlling the robot):
-    #     old_intents = self._last_robot_control_intents
-    #     self._last_robot_control_intents = input_intents
-    #
-    #     if robot.is_on_charger:
-    #         # Cozmo is stuck on the charger
-    #         if input_intents.left_wheel_speed > 0 and input_intents.right_wheel_speed > 0:
-    #             # User is trying to drive forwards (off the charger) - issue an explicit drive off action
-    #             try:
-    #                 # don't wait for action to complete
-    #                 robot.drive_off_charger_contacts(in_parallel=True)
-    #             except RobotBusy:
-    #                 # Robot is busy doing another action - try again next time we get a drive impulse
-    #                 pass
-    #
-    #     if ((old_intents.left_wheel_speed != input_intents.left_wheel_speed) or
-    #         (old_intents.right_wheel_speed != input_intents.right_wheel_speed)):
-    #         robot.drive_wheel_motors(input_intents.left_wheel_speed,
-    #                                  input_intents.right_wheel_speed,
-    #                                  input_intents.left_wheel_speed * 4,
-    #                                  input_intents.right_wheel_speed * 4)
-    #
-    #     if (old_intents.lift_speed != input_intents.lift_speed):
-    #         robot.move_lift(input_intents.lift_speed)
-    #
-    #     if (old_intents.head_speed != input_intents.head_speed):
-    #         robot.move_head(input_intents.head_speed)
-    #
-    # def on_robot_state_update(self, evt, *, robot, **kw):
-    #     # Called from SDK whenever the robot state is updated (so i.e. every engine tick).
-    #     # Note: This is called from the SDK thread, so only access safe things
-    #     # We can safely capture any robot and world state here, and push to OpenGL
-    #     # (main) thread via a thread-safe queue.
-    #     world_frame = WorldRenderFrame(robot)
-    #     self._world_frame_queue.append(world_frame)
-    #
-    #     # We update remote control of the robot here too as it's the one
-    #     # method that's called frequently on the SDK thread.
-    #     self._update_robot_remote_control(robot)
-    #
-    def on_new_camera_image(self, image):
-        # Called from SDK whenever a new image is available
-        # Note: This is called from the SDK thread, so only access safe things:
-        # viewer_window will already be created, and reading width/height is safe
-        # (worst case it'll be a frame old, or e.g just width/height updated)
-        # fit_size=(self.viewer_window.width, self.viewer_window.height)
-        # annotated_image = image.annotate_image(fit_size=fit_size)
-        self._img_queue.append(image)
-
-    def on_new_nav_memory_map(self, evt, *, nav_memory_map, **kw):
-        # Called from SDK whenever a new nav memory map is available
-        # Note: This is called from the SDK thread, so only access safe things
-        self._nav_memory_map_queue.append(nav_memory_map)
-
-    def on_new_pose_history(self, evt, *, pose_history, **kw):
-        self._pose_history_queue.append(pose_history)
