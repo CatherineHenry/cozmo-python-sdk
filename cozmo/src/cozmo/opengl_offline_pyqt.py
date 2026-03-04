@@ -66,16 +66,15 @@ from . import util
 from . import world
 from .robot import LiftPosition
 
+import matplotlib.pyplot as plt
+from matplotlib import cm, colormaps
 
 from matplotlib.backends.backend_qtagg import FigureCanvas
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from PySide6.QtWidgets import (
-    QApplication,
     QWidget,
-    QDoubleSpinBox,
     QVBoxLayout,
-    QHBoxLayout,
 )
 import sys
 from PySide6.QtCore import Qt, QTimer
@@ -742,9 +741,27 @@ class WorldRenderFrame():
 
 class MplCanvas(FigureCanvasQTAgg):
 
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
-        fig = Figure(figsize=(width, height), dpi=dpi)
-        self.axes = fig.add_subplot(111)
+    def __init__(self, fig):
+        ax = fig.add_subplot(111, projection='3d')
+        # fig, ax = plt.subplots(subplot_kw=dict(projection='3d'))
+
+        # cbar = fig.colorbar(cm.ScalarMappable(cmap=colormaps['gnuplot']), ax=ax)
+        # cbar.ax.set_ylabel("Region learning potential")
+
+        self.axes = ax
+
+        ax.set_aspect('equal')
+        fig.set_size_inches(13.5, 8.5)
+        # TODO: pass this
+        # fig.suptitle(f"Execution uuid: {agent.execution_uuid}")
+        # ax = fig.add_subplot(111, projection='3d')
+        # ax = None
+
+        cbar = fig.colorbar(cm.ScalarMappable(cmap=colormaps['gnuplot']), ax=ax)
+        cbar.ax.set_ylabel("Region learning potential")
+
+
+
         super().__init__(fig)
 
 class PlotWindow(QWidget):
@@ -752,14 +769,11 @@ class PlotWindow(QWidget):
     This "window" is a QWidget. If it has no parent, it
     will appear as a free-floating window as we want.
     """
-    def __init__(self):
+    def __init__(self, fig):
         super().__init__()
 
-        n_data = 50
-        self.xdata = list(range(n_data))
-        self.ydata = [random.randint(0, 10) for i in range(n_data)]
         # Create canvas object
-        self.canvas = MplCanvas()
+        self.canvas = MplCanvas(fig)
         # Create toolbar, passing canvas as first parament, parent (self, the MainWindow) as second.
         toolbar = NavigationToolbar(self.canvas, self)
 
@@ -768,22 +782,35 @@ class PlotWindow(QWidget):
         self.vbl.addWidget(self.canvas)
         self.setLayout(self.vbl)
 
-    def update_plot(self):
-        # Drop off the first y element, append a new one.
-        self.ydata = self.ydata[1:] + [random.randint(0, 10)]
-        self.canvas.axes.cla()  # Clear the canvas.
-        self.canvas.axes.plot(self.xdata, self.ydata, 'r')
-        # Trigger the canvas to update and redraw.
+        # self.timer = QTimer(self)
+        # self.timer.timeout.connect(self.update) # Triggers paintEvent
+        # self.timer.start(80) # ~60 FPS (1000ms / 60)
+    # Correct way to render:
+    # The paintEvent is called automatically by Qt
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        # self.canvas.axes.draw()
         self.canvas.draw()
+
+    # def update_plot(self):
+    #     # Drop off the first y element, append a new one.
+    #     # self.ydata = self.ydata[1:] + [random.randint(0, 10)]
+    #     # self.canvas.axes.cla()  # Clear the canvas.
+    #     # self.canvas.axes.plot(self.xdata, self.ydata, 'r')
+    #     # Trigger the canvas to update and redraw.
+    #     # plt.sca(self.canvas.axes)
+    #     self.canvas.draw()
 
 class CameraViewWindow(QOpenGLWindow):
     """
     This "window" is a QWidget. If it has no parent, it
     will appear as a free-floating window as we want.
     """
-    def __init__(self, img_queue):
+    def __init__(self):
         super().__init__()
-        self._img_queue = img_queue
+        self._img_queue = collections.deque(maxlen=1)
+
+        # self._img_queue = img_queue
 
 
     def initializeGL(self):
@@ -853,27 +880,34 @@ class CameraViewWindow(QOpenGLWindow):
 
 class SimpleGLWindow(QOpenGLWindow):
 
-    def __init__(self, nav_memory_map_queue, world_frame_queue, pose_history_queue, img_queue):
+    # def __init__(self, nav_memory_map_queue, world_frame_queue, pose_history_queue, img_queue, fig, ax):
+    def __init__(self, fig):
+
         super().__init__()
         # Queues from SDK thread to OpenGL thread
-        # self._intended_pose_history_queue = collections.deque(maxlen=1)
+        self._intended_pose_history_queue = collections.deque(maxlen=1)
+        self._nav_memory_map_queue = collections.deque(maxlen=1)
+        self._world_frame_queue = collections.deque(maxlen=1)
+        self._pose_history_queue = collections.deque(maxlen=1)
 
-        self._nav_memory_map_queue = nav_memory_map_queue
-        self._world_frame_queue = world_frame_queue
-        self._pose_history_queue = pose_history_queue
+        # self._nav_memory_map_queue = nav_memory_map_queue
+        # self._world_frame_queue = world_frame_queue
+        # self._pose_history_queue = pose_history_queue
+
 
         # self._progress_text = ''
 
-        self.camera_view_window = CameraViewWindow(img_queue)
+        self.camera_view_window = CameraViewWindow()
         self.camera_view_window.show()
 
-        self.plot_window = PlotWindow()
+        self.plot_window = PlotWindow(fig)
         self.plot_window.show()
 
 
     def initializeGL(self):
         glClearColor(0, 0, 0, 0)
         glEnable(GL_DEPTH_TEST)
+        glDepthFunc(GL_LESS)
         glShadeModel(GL_SMOOTH)
 
         #         glutInitContextVersion (3, 2)
@@ -977,7 +1011,7 @@ class SimpleGLWindow(QOpenGLWindow):
         self.timer.timeout.connect(self.update) # Triggers paintGL
         self.timer.start(80) # ~60 FPS (1000ms / 60)
 
-        self.timer.timeout.connect(self.plot_window.update_plot)
+        # self.timer.timeout.connect(self.plot_window.update_plot)
 
     def mousePressEvent(self, event):
         current_pos = util.Vector2(event.position().x(), event.position().y())
@@ -1056,8 +1090,8 @@ class SimpleGLWindow(QOpenGLWindow):
 
         # print(f"Key pressed: {key}")
 
-        if key == 'q':
-            QApplication.quit()
+        # if key == 'q':
+        #     QApplication.quit()
 
         # # Handle special keys (like GLUT specialFunc)
         # if event.key() == Qt.Key.Key_Escape:
@@ -1073,7 +1107,7 @@ class SimpleGLWindow(QOpenGLWindow):
         #     if world_frame is not None:
         #         robot_pos = world_frame.robot_frame.pose.position
         #         self._camera_look_at.set_to(robot_pos)
-        elif event.key() == Qt.Key.Key_Escape:  # Escape key
+        if event.key() == Qt.Key.Key_Escape:  # Escape key
             QApplication.quit()
             # self.close()
             # raise KeyboardInterrupt
@@ -1186,8 +1220,7 @@ class SimpleGLWindow(QOpenGLWindow):
                     glPopMatrix()
 
 
-            #                 # Update the latest world frame if there is a new one available
-
+            # Update the latest world frame if there is a new one available
             try:
                 pose_history = self._pose_history_queue.popleft()  # type: WorldRenderFrame
                 self._latest_pose_history = pose_history
@@ -1221,44 +1254,42 @@ class SimpleGLWindow(QOpenGLWindow):
 
                             glPopMatrix()
 
-            #             try:
-            #                 intended_pose_history = self._intended_pose_history_queue.popleft()  # type: WorldRenderFrame
-            #                 self._latest_intended_pose_history = intended_pose_history
-            #             except IndexError:
-            #                 intended_pose_history = self._latest_intended_pose_history
-            #                 pass
+                        try:
+                            intended_pose_history = self._intended_pose_history_queue.popleft()  # type: WorldRenderFrame
+                            self._latest_intended_pose_history = intended_pose_history
+                        except IndexError:
+                            intended_pose_history = self._latest_intended_pose_history
+                            pass
 
-            #             if self._show_intended_pose_history:
-            #                 if intended_pose_history is not None:
-            #                     for idx,past_pose in enumerate(intended_pose_history[0]):
-            #                         if past_pose is not None and past_pose.is_comparable(robot_pose):
-            #                             glPushMatrix()
-            #                             glDisable(GL_LIGHTING)  # so it shows as red from all angles
+                        if self._show_intended_pose_history:
+                            if intended_pose_history is not None:
+                                for idx,past_pose in enumerate(intended_pose_history[0]):
+                                    if past_pose is not None and past_pose.is_comparable(robot_pose):
+                                        glPushMatrix()
+                                        glDisable(GL_LIGHTING)  # so it shows as red from all angles
 
-            #                             pose_matrix = past_pose.to_matrix()
-            #                             glMultMatrixf(pose_matrix.in_row_order) # this appears to make it so my pose arrow is drawn with 0,0 being the pose specified
+                                        pose_matrix = past_pose.to_matrix()
+                                        glMultMatrixf(pose_matrix.in_row_order) # this appears to make it so my pose arrow is drawn with 0,0 being the pose specified
 
-            #                             if self._shade_pose_by_age:
-            #                                 CUBE_OBJECT_COLOR = [0.0, 1.0, 0.0, idx/len(pose_history[0])] # red
-            #                             elif self._shade_pose_by_region:
-            #                                 CUBE_OBJECT_COLOR = self._region_colors[idx] # whatever color for the region
-            #                             elif self._shade_pose_by_learning_progress:
-            #                                 CUBE_OBJECT_COLOR = self._learning_progress_colors[idx]
-            #                             else:
-            #                                 CUBE_OBJECT_COLOR = [0.0, 1.0, 0.0, 1.0] # red
+                                        if self._shade_pose_by_age:
+                                            CUBE_OBJECT_COLOR = [0.0, 1.0, 0.0, idx/len(pose_history[0])] # red
+                                        elif self._shade_pose_by_region:
+                                            CUBE_OBJECT_COLOR = self._region_colors[idx] # whatever color for the region
+                                        elif self._shade_pose_by_learning_progress:
+                                            CUBE_OBJECT_COLOR = self._learning_progress_colors[idx]
+                                        else:
+                                            CUBE_OBJECT_COLOR = [0.0, 1.0, 0.0, 1.0] # red
 
-            #                             # glRotate(past_pose.rotation.angle_z.degrees, 0, 0)
-            #                             self._draw_pose_arrow(CUBE_OBJECT_COLOR, draw_solid=True)
+                                        # glRotate(past_pose.rotation.angle_z.degrees, 0, 0)
+                                        self._draw_pose_arrow(CUBE_OBJECT_COLOR, draw_solid=True)
 
-            #                             glPopMatrix()
+                                        glPopMatrix()
 
 
 
             glDisable(GL_LIGHTING)
             if self._show_cozmo:
                 self._draw_cozmo(robot_frame)
-
-                # self._draw_pose_history()
 
 
         #         if self._show_controls:
