@@ -451,60 +451,12 @@ def _make_pose_arrow():
     new_gl_list = glGenLists(1)
     glNewList(new_gl_list, GL_COMPILE)
 
-    # build each of the 6 faces
-    # for face_index in range(6):
-    #     # calculate normal and vertices for this face
-    #     vertex_normal = [0.0, 0.0, 0.0]
-    #     vertex_pos_options1 = [-0.1, 0.1,  0.1, -0.1]
-    #     vertex_pos_options2 = [ 0.1, 0.1, -0.1, -0.1]
-    #     face_index_even = ((face_index % 2) == 0)
-    #     # odd and even faces point in opposite directions
-    #     normal_dir = 1.0 if face_index_even else -1.0
-    #     if face_index < 2:
-    #         # -X and +X faces (vert positions differ in Y,Z)
-    #         vertex_normal[0] = normal_dir
-    #         v1i = 1
-    #         v2i = 2
-    #     elif face_index < 4:
-    #         # -Y and +Y faces (vert positions differ in X,Z)
-    #         vertex_normal[1] = normal_dir
-    #         v1i = 0
-    #         v2i = 2
-    #     else:
-    #         # -Z and +Z faces (vert positions differ in X,Y)
-    #         vertex_normal[2] = normal_dir
-    #         v1i = 0
-    #         v2i = 1
-    #
-    #     vertex_pos = list(vertex_normal)
-    #
-    #     # Polygon (N verts) with optional normals and tex coords
-    #     glBegin(GL_POLYGON)
-    #     for vert_index in range(4):
-    #         vertex_pos[v1i] = vertex_pos_options1[vert_index]
-    #         vertex_pos[v2i] = vertex_pos_options2[vert_index]
-    #         glNormal3fv(vertex_normal)
-    #         glVertex3fv(vertex_pos)
-    #     glEnd()
-    #
-    #
-    # pose_matrix = pose.to_matrix()
-    # glMultMatrixf(robot_matrix.in_row_order)
-
-    # glPushMatrix();
-    # glTranslatef(0.0, 0.0, -4.5)
-
     glBegin(GL_TRIANGLES)
-    # glColor3f(0.1, 0.2, 0.3);
-    # glVertex3f(-10, 0, 10)
-    # glVertex3f(0, 10, 10)
-    # glVertex3f(-10, 0, 10)
 
     glVertex3f(-10, 3, 0.0)
     glVertex3f(-10, -3, 0.0)
     glVertex3f(0, 0, 0.0)
     glEnd()
-    # glPopMatrix();
 
     glEndList()
 
@@ -600,60 +552,6 @@ def _make_unit_cube():
     return new_gl_list
 
 
-# class OpenGLWindow():
-#     """A Window displaying an OpenGL viewport.
-#
-#     Args:
-#         x (int): The initial x coordinate of the window in pixels.
-#         y (int): The initial y coordinate of the window in pixels.
-#         width (int): The initial height of the window in pixels.
-#         height (int): The initial height of the window in pixels.
-#         window_name (str): The name / title for the window.
-#         is_3d (bool): True to create a Window for 3D rendering.
-#     """
-#     def __init__(self, x, y, width, height, window_name, is_3d):
-#         self._pos = (x, y)
-#         #: int: The width of the window
-#         self.width = width
-#         #: int: The height of the window
-#         self.height = height
-#         self.gl_window = None # this was set to _gl_window, not sure why since that value was unused but gl_window *is used*. Change bcz I need access
-#
-#         self._window_name = window_name
-#         self._is_3d = is_3d
-
-    # def close(self):
-    #     sys.exit
-
-    # def init_display(self):
-    #     """Initialze the OpenGL display parts of the Window.
-    #
-    #     Warning:
-    #         Must be called on the same thread as OpenGL (usually the main thread),
-    #         and after glutInit().
-    #     """
-    #
-    #     glutInitWindowSize(self.width, self.height)
-    #     glutInitWindowPosition(*self._pos)
-    #
-    #     self.gl_window = glutCreateWindow(self._window_name)
-    #
-    #     # glutWMCloseFunc(self.close)
-    #
-    #     if self._is_3d:
-    #         glClearColor(0, 0, 0, 0)
-    #         glEnable(GL_DEPTH_TEST)
-    #         glShadeModel(GL_SMOOTH)
-    #
-    #     glutReshapeFunc(self._reshape)
-    #
-    # def _reshape(self, width, height):
-    #     # Called from OpenGL whenever this window is resized.
-    #     self.width = width
-    #     self.height = height
-    #     glViewport(0, 0, width, height)
-
-
 class RobotRenderFrame():
     """Minimal copy of a Robot's state for 1 frame of rendering."""
     def __init__(self, pose):
@@ -714,24 +612,6 @@ class WorldRenderFrame():
 
         self.robot_frame = RobotRenderFrame(pose)
 
-        # self.cube_frames = []
-        # for i in range(3):
-        #     cube_id = objects.LightCubeIDs[i]
-        #     cube = world.get_light_cube(cube_id)
-        #     if cube is None:
-        #         self.cube_frames.append(None)
-        #     else:
-        #         self.cube_frames.append(CubeRenderFrame(cube))
-
-        # self.face_frames = []
-        # for face in world._faces.values():
-        #     # Ignore faces that have a newer version (with updated id)
-        #     # or if they haven't been seen in a while).
-        #     if not face.has_updated_face_id and (face.time_since_last_seen < 60):
-        #         self.face_frames.append(FaceRenderFrame(face))
-
-
-        # # TODO: catherine: bring this back
         self.custom_object_frames = []
         for obj in seen_objects:
             is_custom = isinstance(obj, objects.CustomObject)
@@ -743,56 +623,102 @@ class WorldRenderFrame():
 
 class MplCanvas(FigureCanvasQTAgg):
 
-    def __init__(self, fig):
-        ax = fig.add_subplot(111, projection='3d')
-        # fig, ax = plt.subplots(subplot_kw=dict(projection='3d'))
+    def __init__(self, fig, execution_uuid):
+        fig.set_size_inches(10.5, 6.5)
 
-        # cbar = fig.colorbar(cm.ScalarMappable(cmap=colormaps['gnuplot']), ax=ax)
-        # cbar.ax.set_ylabel("Region learning potential")
+        fig.suptitle(f"Execution uuid: {execution_uuid}", y=0.95, x=0.35)
+        self.figure = fig
+        ax = fig.add_subplot(111, projection='3d', picker=True)
+        ax.set_aspect('equal')
 
         self.axes = ax
 
-        ax.set_aspect('equal')
-        fig.set_size_inches(13.5, 8.5)
-        # TODO: pass this
-        # fig.suptitle(f"Execution uuid: {agent.execution_uuid}")
-        # ax = fig.add_subplot(111, projection='3d')
-        # ax = None
-
-        cbar = fig.colorbar(cm.ScalarMappable(cmap=colormaps['gnuplot']), ax=ax)
-        cbar.ax.set_ylabel("Region learning potential")
-
+        self.cbar = fig.colorbar(cm.ScalarMappable(cmap=colormaps['gnuplot']), ax=ax)
+        self.cbar.ax.set_ylabel("Region learning potential")
 
 
         super().__init__(fig)
+
+
 
 class PlotWindow(QWidget):
     """
     This "window" is a QWidget. If it has no parent, it
     will appear as a free-floating window as we want.
     """
-    def __init__(self, fig):
+    def __init__(self, fig, execution_uuid):
         super().__init__()
 
         # Create canvas object
-        self.canvas = MplCanvas(fig)
+        self.canvas = MplCanvas(fig, execution_uuid)
+
+        self.map_legend_to_ax = {}  # Will map legend lines to original lines.
+        self.map_legend_to_annotation = {}
+        self.canvas.mpl_connect('pick_event', self.on_pick)
+
+        self.legend_artists = {}
+        lines = [value[0] for value in self.legend_artists.values()]
+        self.leg = self.canvas.axes.legend(lines, self.legend_artists.keys(), fancybox=True, shadow=True, bbox_to_anchor=(1,0.5), loc="center right", fontsize=10,
+                                           bbox_transform=plt.gcf().transFigure)
+
         # Create toolbar, passing canvas as first parament, parent (self, the MainWindow) as second.
         toolbar = NavigationToolbar(self.canvas, self)
 
-        self.vbl = QVBoxLayout()         # Set box for plotting
+
+        # Set box for plotting
+        self.vbl = QVBoxLayout()
         self.vbl.addWidget(toolbar)
         self.vbl.addWidget(self.canvas)
         self.setLayout(self.vbl)
 
-        # self.timer = QTimer(self)
-        # self.timer.timeout.connect(self.update) # Triggers paintEvent
-        # self.timer.start(80) # ~60 FPS (1000ms / 60)
-    # Correct way to render:
+
+    # For hiding/unhiding regions based on legend selection
+    def on_pick(self, event):
+        # On the pick event, find the original line corresponding to the legend
+        # proxy line, and toggle its visibility.
+        legend_line = event.artist
+
+        # Do nothing if the source of the event is not a legend line.
+        if legend_line not in self.map_legend_to_ax:
+            return
+
+
+        ax_line = self.map_legend_to_ax[legend_line]
+        visible = not ax_line.get_visible()
+        ax_line.set_visible(visible)
+
+        # hide annotations too
+        ax_annotation = self.map_legend_to_annotation[legend_line]
+        visible = not ax_annotation.get_visible()
+        ax_annotation.set_visible(visible)
+
+        # Change the alpha on the line in the legend, so we can see what lines
+        # have been toggled.
+        legend_line.set_alpha(1.0 if visible else 0.2)
+
+        self.update()
+
+
+
     # The paintEvent is called automatically by Qt
     def paintEvent(self, event):
         super().paintEvent(event)
-        # self.canvas.axes.draw()
-        self.canvas.draw()
+        try:
+            lines = [value[0] for value in self.legend_artists.values()]
+            leg = self.canvas.axes.legend(lines, self.legend_artists.keys(), fancybox=True, shadow=True, bbox_to_anchor=(1,0.5), loc="center right", fontsize=10,
+                             bbox_transform=plt.gcf().transFigure)
+
+            pickradius = 5  # Points (Pt). How close the click needs to be to trigger an event.
+            lines = [value[0] for value in self.legend_artists.values()]
+            annotations = [value[1] for value in self.legend_artists.values()]
+            for legend_line, ax_line, ax_annotation in zip(leg.get_patches(), lines, annotations):
+                legend_line.set_picker(pickradius)  # Enable picking on the legend line.
+                self.map_legend_to_ax[legend_line] = ax_line
+                self.map_legend_to_annotation[legend_line] = ax_annotation
+
+            self.canvas.draw()
+        except Exception as e:
+            print(f"drawing error: {e} (usually transient)")
 
     # def update_plot(self):
     #     # Drop off the first y element, append a new one.
@@ -882,8 +808,7 @@ class CameraViewWindow(QOpenGLWindow):
 
 class SimpleGLWindow(QOpenGLWindow):
 
-    # def __init__(self, nav_memory_map_queue, world_frame_queue, pose_history_queue, img_queue, fig, ax):
-    def __init__(self, fig):
+    def __init__(self, fig, execution_uuid):
 
         super().__init__()
 
@@ -899,18 +824,18 @@ class SimpleGLWindow(QOpenGLWindow):
         self._world_frame_queue = collections.deque(maxlen=1)
         self._pose_history_queue = collections.deque(maxlen=1)
 
-        # self._nav_memory_map_queue = nav_memory_map_queue
-        # self._world_frame_queue = world_frame_queue
-        # self._pose_history_queue = pose_history_queue
+        self._progress_text = ''
 
-
-        # self._progress_text = ''
+        self.plot_window = PlotWindow(fig, execution_uuid)
+        self.plot_window.resize(800, 600)
+        self.plot_window.move(800, 0)
+        self.plot_window.show()
 
         self.camera_view_window = CameraViewWindow()
+        self.camera_view_window.resize(400, 300)
+        self.camera_view_window.setPosition(600, self.plot_window.height()+60) # interactive matplotlib toolbar adds unaccounted for height
         self.camera_view_window.show()
 
-        self.plot_window = PlotWindow(fig)
-        self.plot_window.show()
 
 
     def initializeGL(self):
@@ -918,13 +843,6 @@ class SimpleGLWindow(QOpenGLWindow):
         glEnable(GL_DEPTH_TEST)
         glDepthFunc(GL_LESS)
         glShadeModel(GL_SMOOTH)
-
-        #         glutInitContextVersion (3, 2)
-        #         glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
-
-        #         glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH)
-
-        #         glutInitDisplayMode(GLUT_3_2_CORE_PROFILE | GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH)
 
         # Load 3D objects
         _cozmo_obj = LoadedObjFile("cozmo.obj")
@@ -934,22 +852,15 @@ class SimpleGLWindow(QOpenGLWindow):
         self.pose_cube = _make_pose_cube()
         self.pose_arrow = _make_pose_arrow()
         self.origin_arrow = _make_origin_arrow()
-
-
-        # Queue from OpenGL thread to SDK thread
-        self._input_intent_queue = collections.deque(maxlen=1)
-
-        # self._is_keyboard_control_enabled = False
-
         self._latest_world_frame = None  # type: WorldRenderFrame
-        #         self._latest_pose_history = None
+        self._latest_pose_history = None
         self._nav_memory_map_display_list = None
 
         # Keyboard
         self._is_key_pressed = {}
-        self._is_alt_down = False
-        self._is_ctrl_down = False
-        self._is_shift_down = False
+        # self._is_alt_down = False
+        # self._is_ctrl_down = False
+        # self._is_shift_down = False
 
         # Mouse
         self._is_mouse_down = {}
@@ -971,33 +882,33 @@ class SimpleGLWindow(QOpenGLWindow):
         #Cozmo
         self._show_cozmo = True
 
-        #         # Controls
-        #         self._show_controls = show_viewer_controls
-        #         self._instructions = '\n'.join(['W, S: Move forward, backward',
-        #                                         'A, D: Turn left, right',
-        #                                         'R, F: Lift up, down',
-        #                                         'T, G: Head up, down',
-        #                                         '',
-        #                                         'LMB: Rotate camera',
-        #                                         'RMB: Move camera',
-        #                                         'LMB + RMB: Move camera up/down',
-        #                                         'LMB + Z: Zoom camera',
-        #                                         'X: same as RMB',
-        #                                         'TAB: center view on robot',
-        #                                         '',
-        #                                         'H: Toggle help',
-        #                                         'C: Show coordinate visuals',
-        #                                         'P: Show pose history',
-        #                                         'O: Shade pose history (opacity)',
-        #                                         'B: Show Cozmo (bot)',
-        #                                         'Note: Smallest square is 10mm',
-        #                                         '''Note: Nav-Map child orientation is;     +---+----+---+
-        #                                         | ^ | 2  | 0 |
-        #                                         +---+----+---+
-        #                                         | Y | 3  | 1 |
-        #                                         +---+----+---+
-        #                                         |   | X->|   |
-        #                                         +---+----+---+'''])
+        # Controls
+        self._show_controls = True
+        self._instructions = '\n'.join(['W, S: Move forward, backward',
+                                        'A, D: Turn left, right',
+                                        'R, F: Lift up, down',
+                                        'T, G: Head up, down',
+                                        '',
+                                        'LMB: Rotate camera',
+                                        'RMB: Move camera',
+                                        'LMB + RMB: Move camera up/down',
+                                        'LMB + Z: Zoom camera',
+                                        'X: same as RMB',
+                                        'TAB: center view on robot',
+                                        '',
+                                        'H: Toggle help',
+                                        'C: Show coordinate visuals',
+                                        'P: Show pose history',
+                                        'O: Shade pose history (opacity)',
+                                        'B: Show Cozmo (bot)',
+                                        'Note: Smallest square is 10mm',
+                                        '''Note: Nav-Map child orientation is;     +---+----+---+
+                                        | ^ | 2  | 0 |
+                                        +---+----+---+
+                                        | Y | 3  | 1 |
+                                        +---+----+---+
+                                        |   | X->|   |
+                                        +---+----+---+'''])
 
         # Camera position and orientation defined by a look-at positions
         # and a pitch/and yaw to rotate around that along with a distance
@@ -1009,18 +920,9 @@ class SimpleGLWindow(QOpenGLWindow):
         self._camera_up = util.Vector3(0.0, 0.0, 1.0)
         self._calculate_camera_pos()
 
-
-
-        # if self.plotting_window:
-        #     self.plotting_window.init_display()
-        #     glutDisplayFunc(self._display)
-
-
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update) # Triggers paintGL
         self.timer.start(80) # ~60 FPS (1000ms / 60)
-
-        # self.timer.timeout.connect(self.plot_window.update_plot)
 
     def mousePressEvent(self, event):
         current_pos = util.Vector2(event.position().x(), event.position().y())
@@ -1049,11 +951,8 @@ class SimpleGLWindow(QOpenGLWindow):
         MOUSE_ROTATE_SCALAR = 0.025  # additional scalar for rotation sensitivity
         mouse_delta = (self._mouse_pos - last_mouse_pos) * MOUSE_SPEED_SCALAR
 
-
-        # Equivalent to GLUT_DOWN
         if event.buttons() == Qt.MouseButton.LeftButton:
-            # print(f"Left button pressed at: {event.position().x()}, {event.position().y()}")
-            if self._is_key_pressed.get(b'z', False):
+            if self._is_key_pressed.get('z', False):
                 # Zoom in/out
                 self._camera_distance = max(0.1, self._camera_distance + mouse_delta.y)
             else:
@@ -1086,36 +985,22 @@ class SimpleGLWindow(QOpenGLWindow):
             # Move up/down
             self._camera_look_at._z -= mouse_delta.y
 
-    # def mouseReleaseEvent(self, event):
-    #     # Equivalent to GLUT_UP
-    #     if event.button() == Qt.MouseButton.LeftButton:
-    #         print("Left button released")
+    def keyReleaseEvent(self, event):
+        key = event.text()
+        self._is_key_pressed[key] = False
 
     def keyPressEvent(self, event):
-        # Equivalent to 'key' in glutKeyboardFunc
         key = event.text()
-        # Equivalent to detecting modifiers
-        modifiers = event.modifiers()
-
-        # print(f"Key pressed: {key}")
-
-        # if key == 'q':
-        #     QApplication.quit()
-
-        # # Handle special keys (like GLUT specialFunc)
-        # if event.key() == Qt.Key.Key_Escape:
-        #     print("Escape pressed")
-
-        # key = self._key_byte_to_lower(key)
+        # modifiers = event.modifiers()
         # self._update_modifier_keys()
-        # self._is_key_pressed[key] = True
+        self._is_key_pressed[key] = True
 
-        # if key == '9':  # Tab
-        #     # Set Look-At point to current robot position
-        #     world_frame = self._latest_world_frame
-        #     if world_frame is not None:
-        #         robot_pos = world_frame.robot_frame.pose.position
-        #         self._camera_look_at.set_to(robot_pos)
+        if event.key() == Qt.Key.Key_Tab:  # Tab
+            # Set Look-At point to current robot position
+            world_frame = self._latest_world_frame
+            if world_frame is not None:
+                robot_pos = world_frame.robot_frame.pose.position
+                self._camera_look_at.set_to(robot_pos)
         if event.key() == Qt.Key.Key_Escape:  # Escape key
             QApplication.quit()
         elif key == 'h' or key == 'H': # h or H key
@@ -1132,14 +1017,15 @@ class SimpleGLWindow(QOpenGLWindow):
             self._shade_pose_by_region = not self._shade_pose_by_region
             self.learning_progress_region_colors.clear()
             self.distinct_region_colors.set()
+            self.plot_window.canvas.cbar.ax.set_visible(False)
         elif key == 'v' or key == 'V':
             self._shade_pose_by_learning_progress = not self._shade_pose_by_learning_progress
             self.distinct_region_colors.clear()
             self.learning_progress_region_colors.set()
+            self.plot_window.canvas.cbar.ax.set_visible(True)
         elif key == 'b' or key == 'B': # b or B key
             self._show_cozmo = not self._show_cozmo
         elif key == 'P':
-            print('setting pause event')
             self.pause_event.set()
         elif key == 'e':
             self.stop_event.set()
@@ -1198,11 +1084,8 @@ class SimpleGLWindow(QOpenGLWindow):
             robot_frame = world_frame.robot_frame
             robot_pose = robot_frame.pose
 
-            #             self._draw_text(GLUT_BITMAP_HELVETICA_12, f"(x:{round(robot_pose.position.x,3)}, y:{round(robot_pose.position.y,3)})[{round(robot_pose.rotation.angle_z.degrees, 2)}°]", 0, 6)
-            #             self._draw_text(GLUT_BITMAP_HELVETICA_12, self._progress_text, 0, 20)
-
-            # self._draw_text(GLUT_BITMAP_9_BY_15, f"(x:{round(robot_pose.position.x,3)}, y:{round(robot_pose.position.y,3)})[{round(robot_pose.rotation.angle_z.degrees, 2)}°]", 0, 6)
-            # self._draw_text(GLUT_BITMAP_9_BY_15, self._progress_text, 0, 20)
+            self._draw_text(GLUT_BITMAP_9_BY_15, f"(x:{round(robot_pose.position.x,3)}, y:{round(robot_pose.position.y,3)})[{round(robot_pose.rotation.angle_z.degrees, 2)}°]", 0, 6)
+            self._draw_text(GLUT_BITMAP_9_BY_15, self._progress_text, 0, 20)
 
             for obj in world_frame.custom_object_frames:
                 obj_pose = obj.pose
@@ -1215,10 +1098,6 @@ class SimpleGLWindow(QOpenGLWindow):
                              obj.y_size_mm * 0.5,
                              obj.z_size_mm * 0.5)
 
-                    # # Draw unit cube but scaled to the mm of the object
-                    # glScalef(obj.x_size_mm,
-                    #          obj.y_size_mm,
-                    #          obj.z_size_mm)
                     # Only draw solid object for observable custom objects
                     if obj.is_fixed:
                         # fixed objects are drawn as transparent outlined boxes to make
@@ -1263,10 +1142,10 @@ class SimpleGLWindow(QOpenGLWindow):
                                 CUBE_OBJECT_COLOR = [1.0, 0.0, 0.0, 1.0] # red
 
                             self._draw_pose_arrow(CUBE_OBJECT_COLOR, draw_solid=True)
-                            # if self._show_coordinates:
-                            #     # self._draw_unit_cube([0.5, 0.5, 0.5, 1.0], True)
-                            #     self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-                            #     self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, f"({round(pose_history[1][idx].position.x,2)}, {round(pose_history[1][idx].position.y,2)})[{round(pose_history[1][idx].rotation.angle_z.degrees, 2)}°]", 0, 0, 2)
+                            if self._show_coordinates:
+                                # self._draw_unit_cube([0.5, 0.5, 0.5, 1.0], True)
+                                self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+                                self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, f"({round(pose_history[1][idx].position.x,2)}, {round(pose_history[1][idx].position.y,2)})[{round(pose_history[1][idx].rotation.angle_z.degrees, 2)}°]", 0, 0, 2)
 
                             glPopMatrix()
 
@@ -1296,7 +1175,6 @@ class SimpleGLWindow(QOpenGLWindow):
                                         else:
                                             CUBE_OBJECT_COLOR = [0.0, 1.0, 0.0, 1.0] # red
 
-                                        # glRotate(past_pose.rotation.angle_z.degrees, 0, 0)
                                         self._draw_pose_arrow(CUBE_OBJECT_COLOR, draw_solid=True)
 
                                         glPopMatrix()
@@ -1307,51 +1185,64 @@ class SimpleGLWindow(QOpenGLWindow):
             if self._show_cozmo:
                 self._draw_cozmo(robot_frame)
 
-
-        #         if self._show_controls:
-        #             self._draw_controls()
+        if self._show_controls:
+            self._draw_controls()
 
         # Draw the (translucent) nav map last so it's sorted correctly against opaque geometry
         self._draw_memory_map()
 
-        # self._draw_origin_circle(color=[1.0, 0.0, 0.0, 1.0])
-        # self._draw_unit_cube(color=[1.0, 0.0, 0.0, 1.0], draw_solid=True)
-        # self._draw_origin_arrow(color=[0.16, 0.35, 1.0, 1.0])
         self._draw_origin_arrow(color=[1.0, 1.0, 1.0, 1])
 
-        #         if self._show_coordinates:
-        #             self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-        #             self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,0)', 0, 0)
+        if self._show_coordinates:
+            self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+            self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,0)', 0, 0)
 
-        #             glPushMatrix() # w/ popmatrix to to save and restore the unscaled coordinate system.
-        #             glTranslatef(10,0,0)
-        #             self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-        #             # glTranslatef(0,0,0)
-        #             glPopMatrix()
-        #             # glFlush()
-        #             self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(10,0)', 10, 0)
-        #             #
-        #             glPushMatrix()
-        #             glTranslatef(-10,0,0)
-        #             self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-        #             glPopMatrix()
-        #             self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(-10,0)', -10, 0)
+            glPushMatrix() # w/ popmatrix to to save and restore the unscaled coordinate system.
+            glTranslatef(10,0,0)
+            self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+            glPopMatrix()
+            self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(10,0)', 10, 0)
 
-        #             # glPushMatrix()
-        #             # glTranslatef(0,10,0)
-        #             # self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-        #             # glPopMatrix()
-        #             # self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,10)', 0, 10)
-        #             #
-        #             # glPushMatrix()
-        #             # glTranslatef(0,-10,0)
-        #             # self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
-        #             # glPopMatrix()
-        #             # self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(0,-10)', 0, -10)
-
+            glPushMatrix()
+            glTranslatef(-10,0,0)
+            self._draw_unit_cube(color=[1.0, 1.0, 1.0, 0.3], draw_solid=True)
+            glPopMatrix()
+            self._draw_text_on_grid(GLUT_BITMAP_9_BY_15, '(-10,0)', -10, 0)
 
         glutSwapBuffers()
 
+
+
+    def _draw_text_on_grid(self, font, input, x, y, z=2,  r=1.0, g=1.0, b=1.0):
+        '''Render text based on window position. The origin is in the bottom-left.'''
+        glColor3f(r, g, b)
+        glRasterPos3f(x,y, z)
+        input_list = input.split('\n')
+        for line in input_list:
+            glRasterPos3f(x, y, z)
+            for ch in line:
+                glutBitmapCharacter(font, ctypes.c_int(ord(ch)))
+
+    def _draw_controls(self):
+        try:
+            GLUT_BITMAP_9_BY_15
+        except NameError:
+            pass
+        else:
+            self._draw_text(GLUT_BITMAP_9_BY_15, self._instructions, 10, 20)
+
+    def _draw_text(self, font, input, x, y, line_height=16, r=1.0, g=1.0, b=1.0):
+        '''Render text based on window position. The origin is in the bottom-left.'''
+        glColor3f(r, g, b)
+        glWindowPos2f(x,y)
+        input_list = input.split('\n')
+        y = y + (line_height * (len(input_list) -1))
+        for line in input_list:
+            glWindowPos2f(x, y)
+            y -= line_height
+            for ch in line:
+                glutBitmapCharacter(font, ctypes.c_int(ord(ch)))
+        glPopMatrix
 
     def _calculate_camera_pos(self):
         # Calculate camera position based on look-at, distance and angles
@@ -1644,7 +1535,6 @@ class SimpleGLWindow(QOpenGLWindow):
         else:
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
 
-        # glMaterialfv(GL_FRONT, GL_AMBIENT, ambient_color)
         glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, color)
         glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR,  color)
 
