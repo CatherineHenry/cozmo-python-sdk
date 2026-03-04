@@ -49,6 +49,8 @@ import math
 import random
 from math import cos, sin, pi
 import time
+from threading import Event
+
 from pkg_resources import resource_stream
 
 from OpenGL.GL import *
@@ -884,6 +886,13 @@ class SimpleGLWindow(QOpenGLWindow):
     def __init__(self, fig):
 
         super().__init__()
+
+        self.pause_event = Event()
+        self.stop_event  = Event()
+        self.future_pause_event = Event()
+        self.learning_progress_region_colors = Event()
+        self.distinct_region_colors = Event()
+
         # Queues from SDK thread to OpenGL thread
         self._intended_pose_history_queue = collections.deque(maxlen=1)
         self._nav_memory_map_queue = collections.deque(maxlen=1)
@@ -1109,14 +1118,11 @@ class SimpleGLWindow(QOpenGLWindow):
         #         self._camera_look_at.set_to(robot_pos)
         if event.key() == Qt.Key.Key_Escape:  # Escape key
             QApplication.quit()
-            # self.close()
-            # raise KeyboardInterrupt
-            # sys.exit()
         elif key == 'h' or key == 'H': # h or H key
             self._show_controls = not self._show_controls
         elif key == 'c' or key == 'C': # c or C key
             self._show_coordinates = not self._show_coordinates
-        elif key == 'p' or key == 'P': # p or P key
+        elif key == 'p': # p or P key
             self._show_pose_history = not self._show_pose_history
         elif key == 'i' or key == 'I': # i or I key
             self._show_intended_pose_history = not self._show_intended_pose_history
@@ -1124,10 +1130,20 @@ class SimpleGLWindow(QOpenGLWindow):
             self._shade_pose_by_age = not self._shade_pose_by_age
         elif key == 'q' or key == 'Q': # q or Q key
             self._shade_pose_by_region = not self._shade_pose_by_region
+            self.learning_progress_region_colors.clear()
+            self.distinct_region_colors.set()
         elif key == 'v' or key == 'V':
             self._shade_pose_by_learning_progress = not self._shade_pose_by_learning_progress
+            self.distinct_region_colors.clear()
+            self.learning_progress_region_colors.set()
         elif key == 'b' or key == 'B': # b or B key
             self._show_cozmo = not self._show_cozmo
+        elif key == 'P':
+            print('setting pause event')
+            self.pause_event.set()
+        elif key == 'e':
+            self.stop_event.set()
+
 
 
 
