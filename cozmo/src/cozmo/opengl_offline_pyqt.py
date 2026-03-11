@@ -84,6 +84,7 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtOpenGL import QOpenGLWindow
 from OpenGL.GL import glClear, glClearColor, GL_COLOR_BUFFER_BIT
 
+from .util import Pose, degrees
 
 
 # Check if OpenGL imported correctly and bound to a valid GLUT implementation
@@ -848,6 +849,21 @@ class SimpleGLWindow(QOpenGLWindow):
         _cozmo_obj = LoadedObjFile("cozmo.obj")
         self.cozmo_object = RenderableObject(_cozmo_obj)
 
+        to_mm = 25.4
+
+        _horse_obj = LoadedObjFile("horse.obj")
+        self.horse_object = RenderableObject(_horse_obj)
+        self.horse_pose = Pose(-2.86*to_mm, -11*to_mm, 0, angle_z=degrees(45))
+
+        _cat_obj = LoadedObjFile("cat.obj")
+        self.cat_object = RenderableObject(_cat_obj)
+        self.cat_pose = Pose(4*to_mm, -5*to_mm, 0, angle_z=degrees(45))
+
+        _goat_obj = LoadedObjFile("goat.obj")
+        self.goat_object = RenderableObject(_goat_obj)
+        self.goat_pose = Pose(9*to_mm, -14*to_mm, 0, angle_z=degrees(-45))
+
+
         self.unit_cube = _make_unit_cube()
         self.pose_cube = _make_pose_cube()
         self.pose_arrow = _make_pose_arrow()
@@ -1188,6 +1204,11 @@ class SimpleGLWindow(QOpenGLWindow):
         if self._show_controls:
             self._draw_controls()
 
+        self._draw_with_lighting(self.cat_object, self.cat_pose, 1.0)
+        self._draw_with_lighting(self.goat_object, self.goat_pose, 0.7)
+        self._draw_with_lighting(self.horse_object, self.horse_pose, 0.6)
+
+
         # Draw the (translucent) nav map last so it's sorted correctly against opaque geometry
         self._draw_memory_map()
 
@@ -1384,6 +1405,26 @@ class SimpleGLWindow(QOpenGLWindow):
             glPushMatrix()
             glCallList(self._nav_memory_map_display_list)
             glPopMatrix()
+
+
+    def _draw_with_lighting(self, obj, obj_pose, obj_scale_amt=10.0):
+        obj_matrix = obj_pose.to_matrix()
+        glPushMatrix()
+        glEnable(GL_LIGHTING)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glEnable(GL_BLEND)
+
+        glMultMatrixf(obj_matrix.in_row_order)
+
+        # glScalef function produces a general scaling along the x, y, and z axes.
+        # The three arguments indicate the desired scale factors along each of the three axes.
+        glScalef(obj_scale_amt, obj_scale_amt, obj_scale_amt)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+
+        # All the generic objects need to have body_geo mesh!
+        glCallList(obj.meshes["body_geo"])
+        glDisable(GL_LIGHTING)
+        glPopMatrix()
 
     def _draw_cozmo(self, robot_frame):
         if self.cozmo_object is None:

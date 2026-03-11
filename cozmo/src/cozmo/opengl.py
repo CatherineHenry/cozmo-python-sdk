@@ -63,6 +63,7 @@ from . import objects
 from . import robot
 from . import util
 from . import world
+from .util import Pose, degrees
 
 
 # Check if OpenGL imported correctly and bound to a valid GLUT implementation
@@ -754,6 +755,7 @@ class OpenGLViewer():
         self._image_handler = None
         self._nav_map_handler = None
         self._robot_state_handler = None
+        self._pose_history_handler = None
         self._exit_requested = False
 
         global opengl_viewer
@@ -1044,6 +1046,24 @@ class OpenGLViewer():
     #             glEnd()
     #             glFlush()
 
+    def _draw_with_lighting(self, obj, obj_pose, obj_scale_amt=10.0):
+        obj_matrix = obj_pose.to_matrix()
+        glPushMatrix()
+        glEnable(GL_LIGHTING)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+        glEnable(GL_BLEND)
+
+        glMultMatrixf(obj_matrix.in_row_order)
+
+        # glScalef function produces a general scaling along the x, y, and z axes.
+        # The three arguments indicate the desired scale factors along each of the three axes.
+        glScalef(obj_scale_amt, obj_scale_amt, obj_scale_amt)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+
+        # All the generic objects need to have body_geo mesh!
+        glCallList(obj.meshes["body_geo"])
+        glDisable(GL_LIGHTING)
+        glPopMatrix()
 
     def _draw_cozmo(self, robot_frame):
         if self.cozmo_object is None:
@@ -1427,6 +1447,10 @@ class OpenGLViewer():
         if self._show_controls:
             self._draw_controls()
 
+        self._draw_with_lighting(self.cat_object, self.cat_pose, 1.0)
+        self._draw_with_lighting(self.goat_object, self.goat_pose, 0.7)
+        # self._draw_with_lighting(self.horse_object, self.horse_pose, 0.6)
+
         # Draw the (translucent) nav map last so it's sorted correctly against opaque geometry
         self._draw_memory_map()
 
@@ -1726,6 +1750,21 @@ class OpenGLViewer():
         _cozmo_obj = LoadedObjFile("cozmo.obj")
         self.cozmo_object = RenderableObject(_cozmo_obj)
 
+
+        in_to_mm = 25.4
+        cm_to_mm = 10
+        _horse_obj = LoadedObjFile("horse.obj")
+        self.horse_object = RenderableObject(_horse_obj)
+        self.horse_pose = Pose(28.11*cm_to_mm, 10.69*cm_to_mm, 0, angle_z=degrees(90))
+
+        _cat_obj = LoadedObjFile("cat.obj")
+        self.cat_object = RenderableObject(_cat_obj)
+        self.cat_pose = Pose(10.21*cm_to_mm, 16.13*cm_to_mm, 0, angle_z=degrees(140))
+
+        _goat_obj = LoadedObjFile("goat.obj")
+        self.goat_object = RenderableObject(_goat_obj)
+        self.goat_pose = Pose(24.58*cm_to_mm, 11.42*cm_to_mm, 0, angle_z=degrees(100))
+
         # Load the cubes, reusing the same file geometry for all 3.
         _cube_obj = LoadedObjFile("cube.obj")
         self.cube_objects.append(RenderableObject(_cube_obj))
@@ -1798,6 +1837,9 @@ class OpenGLViewer():
         if self._robot_state_handler:
             self._robot_state_handler.disable()
             self._robot_state_handler = None
+        if self._pose_history_handler:
+            self._pose_history_handler.disable()
+            self._pose_history_handler = None
         if not self._exit_requested:
             self._request_exit()
 
