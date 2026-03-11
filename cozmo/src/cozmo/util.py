@@ -392,9 +392,13 @@ class Pose:
         rot = self.rotation / other
         return pose_quaternion(pos.x, pos.y, pos.z, rot.q0, rot.q1, rot.q2, rot.q3)
 
-    def define_new_pose_relative_to_robot(self, pose):
-        cozmo_x,cozmo_y,cozmo_z = self.position.x_y_z # robot current x,y,z
-        cozmo_angle_z = self.rotation.angle_z # robot current angle (w.r.t origin I assume)
+    def define_new_pose_relative_to_robot(self, pose, robot_pose=None):
+        if robot_pose is not None:
+            cozmo_x,cozmo_y,cozmo_z = robot_pose.position.x_y_z # robot current x,y,z
+            cozmo_angle_z = robot_pose.rotation.angle_z # robot current angle (w.r.t origin I assume)
+        else:
+            cozmo_x,cozmo_y,cozmo_z = self.position.x_y_z # robot current x,y,z
+            cozmo_angle_z = self.rotation.angle_z # robot current angle (w.r.t origin I assume)
 
         x,y,z = pose.position.x_y_z
         angle_z = pose.rotation.angle_z
@@ -432,7 +436,7 @@ class Pose:
     #     return Pose(new_x, new_y, 0, angle_z=angle_z, origin_id=self._origin_id)
 
 
-    def define_pose_relative_this(self, new_pose):
+    def define_pose_relative_this(self, new_pose, robot_pose=None):
         '''Creates a new pose such that new_pose's origin is now at the location of this pose.
 
         Args:
@@ -443,8 +447,13 @@ class Pose:
 
         if not isinstance(new_pose, Pose):
             raise TypeError("Unsupported type for new_origin, must be of type Pose")
-        x,y,z = self.position.x_y_z
-        angle_z = self.rotation.angle_z
+        if robot_pose is not None:
+            x,y,z = robot_pose.position.x_y_z
+            angle_z = robot_pose.rotation.angle_z
+        else:
+            x,y,z = self.position.x_y_z
+            angle_z = self.rotation.angle_z
+
         new_x,new_y,new_z = new_pose.position.x_y_z
         new_angle_z = new_pose.rotation.angle_z
 

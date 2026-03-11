@@ -961,7 +961,7 @@ class World(event.Dispatcher):
         return await self._wait_for_defined_custom_object(custom_object_archetype)
 
     async def create_custom_fixed_object(self, pose, x_size_mm, y_size_mm, z_size_mm,
-                                         relative_to_robot=False, use_robot_origin=True):
+                                         relative_to_robot=False, use_robot_origin=True, robot_pose=None):
         '''Defines a cuboid of custom size and places it in the world. It cannot be observed.
 
         Args:
@@ -977,14 +977,14 @@ class World(event.Dispatcher):
             A :class:`cozmo.objects.FixedCustomObject` instance with the specified dimensions and pose.
         '''
 
-        relative_pose = self.robot.pose.define_new_pose_relative_to_robot(pose) # Catherine TODO: idk about this
+        relative_pose = self.robot.pose.define_new_pose_relative_to_robot(pose, robot_pose) # Catherine TODO: idk about this
         # Override the origin of the pose to be the same as the robot's. This will make sure they are in
         # the same space in the engine every time.
         if use_robot_origin:
             pose.origin_id = self.robot.pose.origin_id
         # In this case define the given pose to be with respect to the robot's pose as its origin.
         if relative_to_robot:
-            pose = self.robot.pose.define_pose_relative_this(pose)
+            pose = self.robot.pose.define_pose_relative_this(pose, robot_pose)
         msg = _clad_to_engine_iface.CreateFixedCustomObject(pose=pose.encode_pose(),
                                                             xSize_mm=x_size_mm, ySize_mm=y_size_mm, zSize_mm=z_size_mm)
         self.conn.send_msg(msg)
