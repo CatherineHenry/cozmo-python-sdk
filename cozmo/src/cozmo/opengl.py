@@ -549,7 +549,6 @@ def _make_unit_cube():
     return new_gl_list
 
 
-
 class MplCanvas(FigureCanvasQTAgg):
 
     def __init__(self, fig, execution_uuid):
@@ -726,7 +725,7 @@ class CameraViewWindow(QOpenGLWindow):
 
 class SimpleGLWindow(QOpenGLWindow):
 
-    def __init__(self, execution_uuid, enable_camera_view=False, show_viewer_controls=False, fig=None):
+    def __init__(self, execution_uuid, enable_camera_view=False, show_viewer_controls=False, plot_fig=None):
 
         super().__init__()
         # Queues from SDK thread to OpenGL thread
@@ -739,19 +738,22 @@ class SimpleGLWindow(QOpenGLWindow):
         self._input_intent_queue = collections.deque(maxlen=1)
         self._last_robot_control_intents = RobotControlIntents()
         self._is_keyboard_control_enabled = True
+        self._show_controls = show_viewer_controls
 
         self._progress_text = ''
 
-        if fig:
-            self.plot_window = PlotWindow(fig, execution_uuid)
+        if plot_fig is not None:
+            self.plot_window = PlotWindow(plot_fig, execution_uuid)
             self.plot_window.resize(800, 600)
             self.plot_window.move(800, 0)
             self.plot_window.show()
-
-        self.camera_view_window = CameraViewWindow(self._img_queue)
-        self.camera_view_window.resize(400, 300)
-        self.camera_view_window.setPosition(600, self.plot_window.height()+60 if fig else 0) # interactive matplotlib toolbar adds unaccounted for height
-        self.camera_view_window.show()
+        
+        self.camera_view_window = None
+        if enable_camera_view:
+            self.camera_view_window = CameraViewWindow(self._img_queue)
+            self.camera_view_window.resize(400, 300)
+            self.camera_view_window.setPosition(600, self.plot_window.height()+60 if plot_fig else 0) # interactive matplotlib toolbar adds unaccounted for height
+            self.camera_view_window.show()
 
 
 
@@ -807,7 +809,6 @@ class SimpleGLWindow(QOpenGLWindow):
         self._show_cozmo = True
 
         # Controls
-        self._show_controls = True
         self._instructions = '\n'.join(['W, S: Move forward, backward',
                                         'A, D: Turn left, right',
                                         'R, F: Lift up, down',
@@ -1279,7 +1280,6 @@ class SimpleGLWindow(QOpenGLWindow):
     def _idle(self):
         if self._is_keyboard_control_enabled:
             self._update_intents_for_robot()
-        # glutPostRedisplay()
 
     def _draw_unit_cube(self, color, draw_solid):
         glColor(color)

@@ -58,6 +58,9 @@ import sys
 import types
 import warnings
 
+from PySide6.QtGui import QSurfaceFormat
+from PySide6.QtWidgets import QApplication
+
 from . import logger, logger_protocol
 
 from . import base
@@ -605,7 +608,7 @@ def connect(f, conn_factory=conn.CozmoConnection, connector=None):
     return _connect_sync(f, conn_factory, connector)
 
 
-def _connect_viewer(f, conn_factory, connector, viewer):
+def _connect_viewer(f, conn_factory, connector, viewer, app=None):
     # Run the viewer in the main thread, with the SDK running on a new background thread.
     loop = asyncio.new_event_loop()
     abort_future = concurrent.futures.Future()
@@ -626,7 +629,16 @@ def _connect_viewer(f, conn_factory, connector, viewer):
             conn_factory = functools.partial(conn_factory, _sync_abort_future=abort_future)
         lt = _LoopThread(loop, f=view_connector, conn_factory=conn_factory, connector=connector)
         lt.start()
-        viewer.mainloop()
+
+
+        if app is not None: # pyqt opengl
+            try:
+                sys.exit(app.exec())
+            except SystemExit:
+                print("Stopping main thread")
+        else:
+            viewer.mainloop()
+
     except BaseException as e:
         abort_future.set_exception(exceptions.SDKShutdown(repr(e)))
         raise
@@ -635,7 +647,7 @@ def _connect_viewer(f, conn_factory, connector, viewer):
 
 
 def connect_with_3dviewer(f, conn_factory=conn.CozmoConnection, connector=None,
-                          enable_camera_view=False, show_viewer_controls=True):
+                          enable_camera_view=False, show_viewer_controls=True, plot_fig=None):
     '''Setup a connection to a device and run a user function while displaying Cozmo's 3d world.
 
     This displays an OpenGL window on the screen with a 3D view of Cozmo's
@@ -676,9 +688,18 @@ def connect_with_3dviewer(f, conn_factory=conn.CozmoConnection, connector=None,
                 'make sure the PyOpenGL and Pillow packages are installed:\n'
                 'Do `pip3 install --user cozmo[3dviewer]` to install. Error: %s' % opengl)
 
-    viewer = opengl.OpenGLViewer(enable_camera_view=enable_camera_view, show_viewer_controls=show_viewer_controls)
+    # Before QApplication creation
+    format = QSurfaceFormat()
+    format.setDepthBufferSize(24)  # Request 24-bit depth
+    format.setStencilBufferSize(8) # Recommended to include stencil
+    QSurfaceFormat.setDefaultFormat(format)
 
-    _connect_viewer(f, conn_factory, connector, viewer)
+    app = QApplication(sys.argv)
+    window = opengl.SimpleGLWindow("test", enable_camera_view=enable_camera_view, show_viewer_controls=show_viewer_controls, plot_fig=plot_fig)
+    window.resize(800, 600)
+    window.setPosition(0,0)
+    window.show()
+    _connect_viewer(f, conn_factory, connector, window, app)
 
 
 def connect_with_tkviewer(f, tk_root=None, conn_factory=conn.CozmoConnection, connector=None, force_on_top=False):
@@ -781,7 +802,8 @@ def run_program(f, tk_root=None, use_viewer=False, conn_factory=conn.CozmoConnec
                 connector=None, force_viewer_on_top=False,
                 deprecated_filter="default", use_3d_viewer=False,
                 show_viewer_controls=True,
-                exit_on_connection_error=True):
+                exit_on_connection_error=True,
+                plot_fig=None):
     '''Connect to Cozmo and run the provided program/function f.
 
     Args:
@@ -841,7 +863,7 @@ def run_program(f, tk_root=None, use_viewer=False, conn_factory=conn.CozmoConnec
     try:
         if use_3d_viewer:
             connect_with_3dviewer(wrapper, conn_factory=conn_factory, connector=connector,
-                                  enable_camera_view=use_viewer, show_viewer_controls=show_viewer_controls)
+                                  enable_camera_view=use_viewer, show_viewer_controls=show_viewer_controls, plot_fig=plot_fig)
         elif use_viewer:
             connect_with_tkviewer(wrapper, tk_root=tk_root, conn_factory=conn_factory, connector=connector,
                                   force_on_top=force_viewer_on_top)
