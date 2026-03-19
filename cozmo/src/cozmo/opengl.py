@@ -665,7 +665,7 @@ class CameraViewWindow(QOpenGLWindow):
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update) # Triggers paintGL
-        self.timer.start(16) # ~60 FPS (1000ms / 60)
+        self.timer.start(60) # ~60 FPS (1000ms / 60)
 
 
     def paintGL(self):
@@ -851,7 +851,7 @@ class SimpleGLWindow(QOpenGLWindow):
 
         self.keyboard_control_timer = QTimer(self)
         self.keyboard_control_timer.timeout.connect(self._idle)
-        self.keyboard_control_timer.start(16)
+        self.keyboard_control_timer.start(60)
 
     async def connect(self, sdk_conn):
         sdk_robot = await sdk_conn.wait_for_robot()
