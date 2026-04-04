@@ -771,15 +771,23 @@ class SimpleGLWindow(QOpenGLWindow):
 
         _horse_obj = LoadedObjFile("horse.obj")
         self.horse_object = RenderableObject(_horse_obj)
-        self.horse_pose = Pose(-2.86*to_mm, -11*to_mm, 0, angle_z=degrees(45))
+        self.horse_pose = Pose(-2*to_mm, -12*to_mm, 0, angle_z=degrees(-10))
+        # self.horse_pose = Pose(-1.3*to_mm, -11.5*to_mm, 0, angle_z=degrees(45))
 
-        _cat_obj = LoadedObjFile("cat.obj")
+
+        _cat_obj = LoadedObjFile("cat2.obj")
         self.cat_object = RenderableObject(_cat_obj)
-        self.cat_pose = Pose(4*to_mm, -5*to_mm, 0, angle_z=degrees(45))
+        # self.cat_pose = Pose(4*to_mm, -3*to_mm, 0, angle_z=degrees(45))
+        # self.cat_pose = Pose(4*to_mm, -5*to_mm, 0, angle_z=degrees(45))
+        self.cat_pose = Pose(5*to_mm, -3*to_mm, 0, angle_z=degrees(45))
 
         _goat_obj = LoadedObjFile("goat.obj")
         self.goat_object = RenderableObject(_goat_obj)
-        self.goat_pose = Pose(9*to_mm, -14*to_mm, 0, angle_z=degrees(-45))
+        # self.goat_pose = Pose(9*to_mm, -14*to_mm, 0, angle_z=degrees(-45))
+        # self.goat_pose = Pose(11*to_mm, -10.5*to_mm, 0, angle_z=degrees(-45))
+        # self.goat_pose = Pose(21*to_mm, -9.5*to_mm, 0, angle_z=degrees(-45))
+        # self.goat_pose = Pose(33*to_mm, -12*to_mm, 0, angle_z=degrees(45))
+        self.goat_pose = Pose(26*to_mm, -10*to_mm, 0, angle_z=degrees(0))
 
 
         self.unit_cube = _make_unit_cube()
@@ -847,7 +855,7 @@ class SimpleGLWindow(QOpenGLWindow):
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update) # Triggers paintGL
-        self.timer.start(80) # ~60 FPS (1000ms / 60)
+        self.timer.start(80) # ~80 FPS (1000ms / 80)
 
         self.keyboard_control_timer = QTimer(self)
         self.keyboard_control_timer.timeout.connect(self._idle)
@@ -1164,7 +1172,7 @@ class SimpleGLWindow(QOpenGLWindow):
         if self._show_controls:
             self._draw_controls()
 
-        self._draw_with_lighting(self.cat_object, self.cat_pose, 1.0)
+        self._draw_with_lighting(self.cat_object, self.cat_pose, 0.7)
         self._draw_with_lighting(self.goat_object, self.goat_pose, 0.7)
         self._draw_with_lighting(self.horse_object, self.horse_pose, 0.6)
 
